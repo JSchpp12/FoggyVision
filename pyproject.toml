@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "FoggyVision"
+version = "0.1.0"
+description = "Suite of machine learning approaches to estimate atmospheric visibility"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+  {name = "Jacob Schaupp", email = "jacob.schaupp@gmail.com"}
+]
+
+[project.scripts]
+fogvis-cli = "fogvis.cli:main"
+
+[tool.hatch.build.targets.wheel]  # ← was [tools.hatch...], missing the 's' fix
+packages = ["src/fogvis"]
