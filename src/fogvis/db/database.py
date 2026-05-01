@@ -2,9 +2,8 @@ import sqlite3
 import os
 
 from .schema import (
-    create_coordinate_table,
-    create_camera_table,
     create_scene_table,
+    create_coordinate_table,
     create_camera_table,
     create_fog_type_table,
     create_fog_table,

@@ -27,7 +27,7 @@ class DatabaseWriter:
         with self.db as conn:
             cur = conn.cursor()
             cur.execute(
-                "INSERT INTO position (lat, lon) VALUES (?, ?, ?)",
+                "INSERT INTO coordinate (lat, lon) VALUES (?, ?)",
                 (coordinate.lat.value, coordinate.lon.value),
             )
             return cur.lastrowid
@@ -37,7 +37,7 @@ class DatabaseWriter:
         with self.db as conn:
             cur = conn.cursor()
             cur.execute(
-                "INSERT INTO scene (name, upperRightPositionID, lowerLeftPositionID, centerPositionID) VALUES (?, ?, ?)",
+                "INSERT INTO scene (name, upperRightPositionID, lowerLeftPositionID, centerPositionID) VALUES (?, ?, ?, ?)",
                 (
                     scene.name,
                     scene.upper_right_id,
@@ -85,6 +85,7 @@ class DatabaseWriter:
                 """
                 INSERT INTO fog (
                     typeID,
+                    sceneID,
                     expFogDensity,
                     lienarNearDistance,
                     lienarFarDistance,
@@ -96,10 +97,11 @@ class DatabaseWriter:
                     marchedSigmaScattering,
                     marchedStepSizeDist,
                     marchedStepSizeDistLight
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     fog.fog_type_id,
+                    fog.scene_id,
                     fog.exp_fog_density,
                     fog.linear_near_distance,
                     fog.linear_far_distance,
@@ -209,9 +211,57 @@ class DatabaseWriter:
         coordinate: CoordinateEntity,
         camera: CameraEntity,
         fog: Optional[FogEntity] = None,
-        fog_type : Optional[FogTypeEntity] = None,
-        lights: Optional[tuple[LightEntity, CoordinateEntity]] = None,
+        fog_type: Optional[FogTypeEntity] = None,
+        light: Optional[LightEntity] = None,
+        light_type: Optional[LightTypeEntity] = None,
         environment: Optional[EnvironmentEntity] = None,
-        images: Optional[ImageEntity] = None,
+        images: Optional[list[ImageEntity]] = None,
     ) -> dict[str, int]:
-    
+        ids: dict[str, int | None] = {}
+
+        # 1. ScenePosition
+        scene.upper_right_id = self.write_coordinate(coordinate) or 0
+        scene.lower_left_id = self.write_coordinate(coordinate) or 0
+        scene.center_id = self.write_coordinate(coordinate) or 0
+
+        # 1. Scene
+        ids["scene"] = self.write_scene(scene)
+
+        # 2. Camera position + camera
+        ids["camera_position"] = self.write_coordinate(coordinate)
+        camera.scene_id = ids["scene"]
+        camera.position_id = ids["camera_position"]
+        ids["camera"] = self.write_camera(camera)
+
+        # 3. Optional fog
+        if fog is not None:
+            fog.scene_id = ids["scene"] or 0
+            fog.fog_type_id = self.write_fog_type(fog_type) or 0
+            ids["fog"] = self.write_fog(fog)
+
+        # 4. Optional lights (each with its own position)
+        if light:
+            light.type_id = self.write_light_type(light_type) or 0
+            ids["light"] = self.write_light(light)
+
+        # 5. Optional environment + environment–light links
+        if environment is not None:
+            environment.fog_id = ids["fog"]
+            env_id = self.write_environment(environment)
+            ids["environment"] = env_id
+
+            light_id = ids["light"]
+            self.write_environment_light(
+                EnvironmentLightEntity(environment_id=env_id, light_id=light_id)
+            )
+
+        # 6. Optional images
+        if images:
+            ids["images"] = []
+            for image in images:
+                image.scene_id = ids["scene"]
+                image.camera_id = ids["camera"]
+                image.environment_id = ids["environment"]
+                ids["images"].append(self.write_image(image))
+
+        return ids

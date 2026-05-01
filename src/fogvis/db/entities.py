@@ -35,6 +35,7 @@ class FogTypeEntity:
 
 @dataclass
 class FogEntity:
+    scene_id : int
     fog_type_id: int
     exp_fog_density: float
     linear_near_distance: float

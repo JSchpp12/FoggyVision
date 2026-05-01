@@ -41,10 +41,11 @@ class ImageReader:
     def read_fog_type(self) -> FogTypeEntity:
         return FogTypeEntity(name=self._data["fog_type"])
 
-    def read_fog(self, *, fog_type_id: int = 0) -> FogEntity:
+    def read_fog(self, *, fog_type_id: int = 0, scene_id: int = 0) -> FogEntity:
         fp = self._data["fog_params"]
 
         return FogEntity(
+            scene_id=scene_id,
             fog_type_id=fog_type_id,
             # exponential
             exp_fog_density=float(fp["expFogInfo"]["density"]),
@@ -78,12 +79,18 @@ class ImageReader:
     def read_light(self, *, type_id: int = 0) -> LightEntity:
         """Maps the light block to a Light. Pass type_id once you have the DB id."""
         l = self._data["light"]
+        a_str: str = json.dumps(l["ambient"])
+        d_str: str = json.dumps(l["diffuse"])
+        s_str: str = json.dumps(l["specular"])
+        dir_str: str = json.dumps(l["direction"])
+        pos_str: str = json.dumps(l["position"])
+
         return LightEntity(
-            ambient=VectorContainer.from_json(l["ambient"]),
-            diffuse=VectorContainer.from_json(l["diffuse"]),
-            specular=VectorContainer.from_json(l["specular"]),
-            virtualDirection=VectorContainer.from_json(l["direction"]),
-            virtualPosition=VectorContainer.from_json(l["position"]),
+            ambient=VectorContainer.from_json(a_str),
+            diffuse=VectorContainer.from_json(d_str),
+            specular=VectorContainer.from_json(s_str),
+            virtualDirection=VectorContainer.from_json(dir_str),
+            virtualPosition=VectorContainer.from_json(pos_str),
             enabled=bool(l["enabled"]),
             innerDiameter=float(l["innerDiameter"]),
             outerDiameter=float(l["outerDiameter"]),
@@ -99,10 +106,13 @@ class ImageReader:
         near_clip: float = 0.0,
         far_clip: float = 0.0,
     ) -> CameraEntity:
+        pos_str: str = str(json.dumps(self._data["camera_position"]))
+        dir_str: str = json.dumps(self._data["camera_look_dir"])
+
         return CameraEntity(
             scene_id=scene_id,
-            virtual_position=VectorContainer.from_json(self._data["camera_position"]),
-            look_dir=VectorContainer.from_json(self._data["camera_look_dir"]),
+            virtual_position=VectorContainer.from_json(pos_str),
+            look_dir=VectorContainer.from_json(dir_str),
             fov=fov,
             near_clip=near_clip,
             far_clip=far_clip,

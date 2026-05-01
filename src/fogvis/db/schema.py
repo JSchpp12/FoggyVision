@@ -14,11 +14,11 @@ def create_coordinate_table(cur: sqlite3.Cursor) -> None:
 def create_scene_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS scene(
-        id                          INTEGER PRIMARY KEY AUTOINCREMENT,
-        NAME                        TEXT NOT NULL, 
-        upperRightPositionID      INTEGER NOT NULL REFERENCES coordinate(id), 
-        lowerLeftPositionID     INTEGER NOT NULLREFERENCES coordinate(id) ,
-        centerPositionID          INTEGER NOT NULL REFERENCES coordinate(id) 
+        id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+        name                    TEXT NOT NULL, 
+        upperRightPositionID    INTEGER NOT NULL REFERENCES coordinate(id), 
+        lowerLeftPositionID     INTEGER NOT NULL REFERENCES coordinate(id) ,
+        centerPositionID        INTEGER NOT NULL REFERENCES coordinate(id) 
     )
     """
     cur.execute(cmd)
@@ -42,7 +42,7 @@ def create_fog_type_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS fog_type (
         id              INTEGER PRIMARY KEY AUTOINCREMENT, 
-        typeName       TEXT NOT NULL
+        name            TEXT NOT NULL
     )"""
     cur.execute(cmd)
 
@@ -51,7 +51,8 @@ def create_fog_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS fog (
         id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        typeID INTEGER REFERENCES fog_type(id) NOT NULL, 
+        typeID INTEGER NOT NULL REFERENCES fog_type(id), 
+        sceneID INTEGER NOT NULL REFERENCES scene(id),
         expFogDensity REAL,
         lienarNearDistance REAL,
         lienarFarDistance REAL, 
@@ -85,7 +86,7 @@ def create_light_table(cur: sqlite3.Cursor) -> None:
         diffuse         TEXT NOT NULL,
         specular        TEXT NOT NULL,
         virtualDirection       TEXT NOT NULL,
-        virtualPosition        TEXT NOT NULL
+        virtualPosition        TEXT NOT NULL,
         enabled       BOOLEAN NOT NULL,
         innerDiameter REAL NOT NULL,
         outerDiameter REAL NOT NULL,
