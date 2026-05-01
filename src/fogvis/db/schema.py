@@ -118,7 +118,7 @@ def create_image_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS image (
         id                      INTEGER PRIMARY KEY AUTOINCREMENT, 
-        filePath               TEXT NOT NULL, 
+        filePath               TEXT NOT NULL UNIQUE, 
         visibilityDistance     REAL NOT NULL,
         cameraID               INTEGER NOT NULL REFERENCES camera(id),
         sceneID                INTEGER NOT NULL REFERENCES scene(id),
