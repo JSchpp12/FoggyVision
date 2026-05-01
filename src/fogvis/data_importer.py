@@ -1,4 +1,4 @@
-from fogvis.db import DatabaseWriter, ImageReader, SceneEntity, CoordinateEntity
+from fogvis.db import DatabaseWriter, ImageImporter, SceneEntity, CoordinateEntity
 from fogvis.common import Latitude, Longitude
 
 import queue
@@ -12,7 +12,7 @@ _DONE = object()
 
 
 def parse_file(filepath: Path) -> dict[str, Any]:
-    reader: ImageReader = ImageReader(filepath)
+    reader: ImageImporter = ImageImporter(filepath)
     return {
         "scene": SceneEntity(name="", upper_right_id=0, lower_left_id=0, center_id=0),
         "coordinate": CoordinateEntity(lat=Latitude("0.0"), lon=Longitude("0.0")),

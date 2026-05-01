@@ -32,7 +32,7 @@ class FrameData:
 LIGHT_TYPE_NAMES = {0: "Point", 1: "Directional", 2: "Spot"}
 
 
-class ImageReader:
+class ImageImporter:
     def __init__(self, path: Path) -> None:
         self.path = path
         with open(path, "r", encoding="utf-8") as fh:

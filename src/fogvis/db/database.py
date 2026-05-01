@@ -41,3 +41,6 @@ class Database:
             create_environment_table(cur)
             create_environment_light_table(cur)
             create_image_table(cur)
+            
+            create_image_index = "CREATE INDEX IF NOT EXISTS idx_image_filepath ON image(filePath)"
+            cur.execute(create_image_index)
