@@ -1,4 +1,6 @@
 import sqlite3
+from sqlite3 import Connection
+from typing import Optional
 import os
 
 from .schema import (
@@ -18,16 +20,27 @@ from .schema import (
 class Database:
     def __init__(self, db_path: os.PathLike) -> None:
         self.db_path: os.PathLike = db_path
+        self.conn : Optional[sqlite3.Connection] = None
 
     def __enter__(self) -> sqlite3.Connection:
-        self.conn = sqlite3.connect(self.db_path)
-        self.conn.execute("PRAGMA foreign_keys = ON")
-        return self.conn
+        return self.get_connection()
 
     def __exit__(self, exc_type, exc, tb):
-        self.conn.commit()
-        self.conn.close()
+        self.close_connection()
 
+    def close_connection(self): 
+        con = self.get_connection()
+        con.commit()
+        con.close()
+        self.conn = None
+
+    def get_connection(self):
+        if self.conn is None: 
+            self.conn = sqlite3.connect(self.db_path)
+            self.conn.execute("PRAGMA foreign_keys = ON")
+            
+        return self.conn
+    
     def init_tables(self) -> None:
         with self as conn:
             cur = conn.cursor()

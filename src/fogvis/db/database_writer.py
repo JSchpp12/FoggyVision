@@ -1,8 +1,8 @@
 import sqlite3
 import os
-
+from contextlib import closing
 from typing import Optional
-
+from sqlite3 import Cursor
 from .database import Database
 from .entities import (
     CoordinateEntity,
@@ -21,25 +21,35 @@ from .entities import (
 class DatabaseWriter:
     def __init__(self, db_path: os.PathLike) -> None:
         self.db: Database = Database(db_path)
+        self.cur: Optional[Cursor] = None
 
-    def write_coordinate(self, coordinate: CoordinateEntity) -> int | None:
+    def __enter__(self):
+        self.cur = self.db.conn.cursor()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.cur is not None:
+            self.cur.close()
+            self.cur = None
+
+    @staticmethod
+    def write_coordinate(db: Database, coordinate: CoordinateEntity) -> int | None:
         """Insert a coordinate record and return its row ID."""
-        with self.db as conn:
-            cur = conn.cursor()
+        with closing(db.get_connection().cursor()) as cur:
             cur.execute(
                 "INSERT INTO coordinate (lat, lon) VALUES (?, ?)",
                 (coordinate.lat.value, coordinate.lon.value),
             )
             return cur.lastrowid
 
-    def write_scene(self, scene: SceneEntity) -> int | None:
+    @staticmethod
+    def write_scene(db: Database, scene: SceneEntity) -> int | None:
         """Insert a scene record and return its row ID."""
-        with self.db as conn:
-            cur = conn.cursor()
+        with closing(db.get_connection().cursor()) as cur:
             cur.execute(
-                "INSERT INTO scene (name, upperRightPositionID, lowerLeftPositionID, centerPositionID) VALUES (?, ?, ?, ?)",
+                "INSERT INTO scene (name, coverageDistanceMiles, upperRightPositionID, lowerLeftPositionID, centerPositionID) VALUES (?, ?, ?, ?, ?)",
                 (
                     scene.name,
+                    scene.coverage_distance_miles,
                     scene.upper_right_id,
                     scene.lower_left_id,
                     scene.center_id,
@@ -47,10 +57,10 @@ class DatabaseWriter:
             )
             return cur.lastrowid
 
-    def write_camera(self, cam: CameraEntity) -> int | None:
+    @staticmethod
+    def write_camera(db: Database, cam: CameraEntity) -> int | None:
         """Insert a camera record and return its row ID."""
-        with self.db as conn:
-            cur = conn.cursor()
+        with closing(db.get_connection().cursor()) as cur:
             cur.execute(
                 """
                 INSERT INTO camera (virtualPosition, sceneID, lookDir, fov, nearClip, farClip)
@@ -67,28 +77,28 @@ class DatabaseWriter:
             )
             return cur.lastrowid
 
-    def write_fog_type(self, ft: FogTypeEntity) -> int | None:
+    @staticmethod
+    def write_fog_type(db: Database, ft: FogTypeEntity) -> int | None:
         """Insert a fog type record and return its row ID."""
-        with self.db as conn:
-            cur = conn.cursor()
+        with closing(db.get_connection().cursor()) as cur:
             cur.execute(
                 "INSERT INTO fog_type (name) VALUES (?)",
                 (ft.name,),
             )
             return cur.lastrowid
 
-    def write_fog(self, fog: FogEntity) -> int | None:
+    @staticmethod
+    def write_fog(db: Database, fog: FogEntity) -> int | None:
         """Insert a fog record and return its row ID."""
-        with self.db as conn:
-            cur = conn.cursor()
+        with closing(db.get_connection().cursor()) as cur:
             cur.execute(
                 """
                 INSERT INTO fog (
                     typeID,
                     sceneID,
                     expFogDensity,
-                    lienarNearDistance,
-                    lienarFarDistance,
+                    linearNearDistance,
+                    linearFarDistance,
                     marchedCutoff,
                     marchedDefaultDensity,
                     marchedDensityMultiplier,
@@ -105,7 +115,7 @@ class DatabaseWriter:
                     fog.exp_fog_density,
                     fog.linear_near_distance,
                     fog.linear_far_distance,
-                    fog.marched_cutoff,
+                    fog.marched_cutoff or "NULL",
                     fog.marched_default_density,
                     fog.marched_density_multiplier,
                     fog.marched_lightDirG,
@@ -117,20 +127,20 @@ class DatabaseWriter:
             )
             return cur.lastrowid
 
-    def write_light_type(self, lt: LightTypeEntity) -> int | None:
+    @staticmethod
+    def write_light_type(db: Database, lt: LightTypeEntity) -> int | None:
         """Insert a light type record and return its row ID."""
-        with self.db as conn:
-            cur = conn.cursor()
+        with closing(db.get_connection().cursor()) as cur:
             cur.execute(
                 "INSERT INTO light_type (name) VALUES (?)",
                 (lt.name,),
             )
             return cur.lastrowid
 
-    def write_light(self, light: LightEntity) -> int | None:
+    @staticmethod
+    def write_light(db: Database, light: LightEntity) -> int | None:
         """Insert a light record and return its row ID."""
-        with self.db as conn:
-            cur = conn.cursor()
+        with closing(db.get_connection().cursor()) as cur:
             cur.execute(
                 """
                 INSERT INTO light (
@@ -161,22 +171,22 @@ class DatabaseWriter:
             )
             return cur.lastrowid
 
-    def write_environment(self, environment: EnvironmentEntity) -> int | None:
+    @staticmethod
+    def write_environment(db: Database, environment: EnvironmentEntity) -> int | None:
         """Insert an environment record and return its row ID."""
-        with self.db as conn:
-            cur = conn.cursor()
+        with closing(db.get_connection().cursor()) as cur:
             cur.execute(f"""
                 INSERT INTO environment (fogID)
                 VALUES ({environment.fog_id})
                 """)
             return cur.lastrowid
 
+    @staticmethod
     def write_environment_light(
-        self, environment_light: EnvironmentLightEntity
+        db: Database, environment_light: EnvironmentLightEntity
     ) -> int | None:
         """Insert an environment–light association and return its row ID."""
-        with self.db as conn:
-            cur = conn.cursor()
+        with closing(db.get_connection().cursor()) as cur:
             cur.execute(
                 """
                 INSERT INTO environment_light (environmentID, lightID)
@@ -186,10 +196,10 @@ class DatabaseWriter:
             )
             return cur.lastrowid
 
-    def write_image(self, image: ImageEntity) -> int | None:
+    @staticmethod
+    def write_image(db: Database, image: ImageEntity) -> int | None:
         """Insert an image record and return its row ID."""
-        with self.db as conn:
-            cur = conn.cursor()
+        with closing(db.get_connection().cursor()) as cur:
             cur.execute(
                 """
                 INSERT INTO image (filePath, visibilityDistance, cameraID, sceneID, environmentID)
@@ -207,8 +217,9 @@ class DatabaseWriter:
 
     def write_full_scene(
         self,
-        scene: SceneEntity,
-        coordinate: CoordinateEntity,
+        scene_name: str,
+        scene_center: CoordinateEntity,
+        scene_vis_range: int,
         camera: CameraEntity,
         fog: Optional[FogEntity] = None,
         fog_type: Optional[FogTypeEntity] = None,
@@ -219,49 +230,80 @@ class DatabaseWriter:
     ) -> dict[str, int]:
         ids: dict[str, int | None] = {}
 
-        # 1. ScenePosition
-        scene.upper_right_id = self.write_coordinate(coordinate) or 0
-        scene.lower_left_id = self.write_coordinate(coordinate) or 0
-        scene.center_id = self.write_coordinate(coordinate) or 0
+        with closing(self.db.get_connection().cursor()) as cur:
+            # 1. Scene
+            center_coord = scene_center.get_record_id(self.db)
 
-        # 1. Scene
-        ids["scene"] = self.write_scene(scene)
-
-        # 2. Camera position + camera
-        ids["camera_position"] = self.write_coordinate(coordinate)
-        camera.scene_id = ids["scene"]
-        camera.position_id = ids["camera_position"]
-        ids["camera"] = self.write_camera(camera)
-
-        # 3. Optional fog
-        if fog is not None:
-            fog.scene_id = ids["scene"] or 0
-            fog.fog_type_id = self.write_fog_type(fog_type) or 0
-            ids["fog"] = self.write_fog(fog)
-
-        # 4. Optional lights (each with its own position)
-        if light:
-            light.type_id = self.write_light_type(light_type) or 0
-            ids["light"] = self.write_light(light)
-
-        # 5. Optional environment + environment–light links
-        if environment is not None:
-            environment.fog_id = ids["fog"]
-            env_id = self.write_environment(environment)
-            ids["environment"] = env_id
-
-            light_id = ids["light"]
-            self.write_environment_light(
-                EnvironmentLightEntity(environment_id=env_id, light_id=light_id)
+            scene: SceneEntity = SceneEntity(
+                name=scene_name,
+                coverage_distance_miles=scene_vis_range,
+                upper_right_id=center_coord
+                or DatabaseWriter.write_coordinate(self.db, scene_center)
+                or 0,
+                lower_left_id=center_coord
+                or DatabaseWriter.write_coordinate(self.db, scene_center)
+                or 0,
+                center_id=center_coord
+                or DatabaseWriter.write_coordinate(self.db, scene_center)
+                or 0,
             )
 
-        # 6. Optional images
-        if images:
-            ids["images"] = []
-            for image in images:
-                image.scene_id = ids["scene"]
-                image.camera_id = ids["camera"]
-                image.environment_id = ids["environment"]
-                ids["images"].append(self.write_image(image))
+            if not scene.get_does_exist(self.db):
+                ids["scene"] = DatabaseWriter.write_scene(self.db, scene)
+            else:
+                ids["scene"] = scene.get_record_id(self.db)
+
+            # 2. Camera position + camera
+            ids["camera_position"] = DatabaseWriter.write_coordinate(
+                self.db, scene_center
+            )
+            camera.scene_id = ids["scene"]
+            camera.position_id = ids["camera_position"]
+            if camera.get_does_exist(self.db):
+                camera_id = camera.get_record_id(self.db)
+            else:
+                camera_id = DatabaseWriter.write_camera(self.db, camera)
+            ids["camera"] = camera_id
+
+            if fog is not None:
+                fog.scene_id = ids["scene"] or 0
+                fog.fog_type_id = 0
+                if fog_type.get_does_exist(self.db):
+                    fog.fog_type_id = fog_type.get_record_id(self.db) or 0
+                else:
+                    fog.fog_type_id = (
+                        DatabaseWriter.write_fog_type(self.db, fog_type) or 0
+                    )
+
+                ids["fog"] = DatabaseWriter.write_fog(self.db, fog)
+
+            if light:
+                light.type_id = (
+                    DatabaseWriter.write_light_type(self.db, light_type) or 0
+                )
+                ids["light"] = DatabaseWriter.write_light(self.db, light)
+
+            if environment is not None:
+                environment.fog_id = ids["fog"]
+                env_id = DatabaseWriter.write_environment(self.db, environment)
+                ids["environment"] = env_id
+
+                if "light" in ids:
+                    light_id = ids["light"]
+                    DatabaseWriter.write_environment_light(
+                        self.db,
+                        EnvironmentLightEntity(
+                            environment_id=env_id, light_id=light_id
+                        ),
+                    )
+
+            if images:
+                ids["images"] = []
+                for image in images:
+                    if not image.get_does_exist(self.db):
+                        image.scene_id = ids["scene"]
+                        image.camera_id = ids["camera"]
+                        image.environment_id = ids["environment"]
+                        ids["images"].append(DatabaseWriter.write_image(self.db, image))
 
         return ids

@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
 from dataclasses import dataclass
+from typing import Optional
 
-from fogvis.common import WorldCoordinates, VectorContainer
+from fogvis.common import WorldCoordinates, VectorContainer3D, VectorContainer2D
 from .entities import (
     FogEntity,
     LightEntity,
@@ -12,8 +13,15 @@ from .entities import (
     ImageEntity,
     EnvironmentEntity,
     EnvironmentLightEntity,
+    SceneEntity,
 )
 
+
+@dataclass 
+class SceneData: 
+    name : str 
+    center : VectorContainer2D
+    vis_range : int
 
 @dataclass
 class FrameData:
@@ -43,7 +51,9 @@ class ImageImporter:
 
     def read_fog(self, *, fog_type_id: int = 0, scene_id: int = 0) -> FogEntity:
         fp = self._data["fog_params"]
-
+        marched_cutoff : Optional[float] = None
+        if "cutoffValue" in fp["marchedInfo"]: 
+            marched_cutoff = float(fp["marchedInfo"]["cutoffValue"])
         return FogEntity(
             scene_id=scene_id,
             fog_type_id=fog_type_id,
@@ -53,7 +63,7 @@ class ImageImporter:
             linear_near_distance=float(fp["linearInfo"]["nearDist"]),
             linear_far_distance=float(fp["linearInfo"]["farDist"]),
             # ray-marched
-            marched_cutoff=float(fp["marchedInfo"]["cutoffValue"]),
+            marched_cutoff=marched_cutoff,
             marched_default_density=float(fp["marchedInfo"]["defaultDensity"]),
             marched_density_multiplier=float(fp["marchedInfo"]["densityMultiplier"]),
             marched_lightDirG=float(fp["marchedInfo"]["lightPropertyDirG"]),
@@ -71,31 +81,45 @@ class ImageImporter:
     ) -> EnvironmentLightEntity:
         return EnvironmentLightEntity(light_id=light_id, environment_id=environment_id)
 
-    def read_light_type(self) -> LightTypeEntity:
-        type_int = int(self._data["light"]["type"])
-        name: str = LIGHT_TYPE_NAMES.get(type_int, f"unknown_{type_int}")
-        return LightTypeEntity(name=name)
+    def read_light_type(self) -> Optional[LightTypeEntity]:
+        if "light" in self._data:
+            type_int = int(self._data["light"]["type"])
+            name: str = LIGHT_TYPE_NAMES.get(type_int, f"unknown_{type_int}")
+            return LightTypeEntity(name=name)
+        
+        return None
 
-    def read_light(self, *, type_id: int = 0) -> LightEntity:
+    def read_light(self, *, type_id: int = 0) -> Optional[LightEntity]:
         """Maps the light block to a Light. Pass type_id once you have the DB id."""
-        l = self._data["light"]
-        a_str: str = json.dumps(l["ambient"])
-        d_str: str = json.dumps(l["diffuse"])
-        s_str: str = json.dumps(l["specular"])
-        dir_str: str = json.dumps(l["direction"])
-        pos_str: str = json.dumps(l["position"])
+        if "light" in self._data:
+            l = self._data["light"]
+            a_str: str = json.dumps(l["ambient"])
+            d_str: str = json.dumps(l["diffuse"])
+            s_str: str = json.dumps(l["specular"])
+            dir_str: str = json.dumps(l["direction"])
+            pos_str: str = json.dumps(l["position"])
 
-        return LightEntity(
-            ambient=VectorContainer.from_json(a_str),
-            diffuse=VectorContainer.from_json(d_str),
-            specular=VectorContainer.from_json(s_str),
-            virtualDirection=VectorContainer.from_json(dir_str),
-            virtualPosition=VectorContainer.from_json(pos_str),
-            enabled=bool(l["enabled"]),
-            innerDiameter=float(l["innerDiameter"]),
-            outerDiameter=float(l["outerDiameter"]),
-            luminance=float(l["luminance"]),
-            type_id=type_id,
+            return LightEntity(
+                ambient=VectorContainer3D.from_json(a_str),
+                diffuse=VectorContainer3D.from_json(d_str),
+                specular=VectorContainer3D.from_json(s_str),
+                virtualDirection=VectorContainer3D.from_json(dir_str),
+                virtualPosition=VectorContainer3D.from_json(pos_str),
+                enabled=bool(l["enabled"]),
+                innerDiameter=float(l["innerDiameter"]),
+                outerDiameter=float(l["outerDiameter"]),
+                luminance=float(l["luminance"]),
+                type_id=type_id,
+            )
+        
+        return None
+
+    def read_scene(self) -> SceneData:
+        center_str : str = json.dumps(self._data["terrain_shape"]["center"])
+        return SceneData(
+            name = self._data["terrain_name"],
+            center = VectorContainer2D.from_json(center_str),
+            vis_range = self._data["terrain_shape"]["view_distance"]
         )
 
     def read_camera(
@@ -111,8 +135,8 @@ class ImageImporter:
 
         return CameraEntity(
             scene_id=scene_id,
-            virtual_position=VectorContainer.from_json(pos_str),
-            look_dir=VectorContainer.from_json(dir_str),
+            virtual_position=VectorContainer3D.from_json(pos_str),
+            look_dir=VectorContainer3D.from_json(dir_str),
             fov=fov,
             near_clip=near_clip,
             far_clip=far_clip,

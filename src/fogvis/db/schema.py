@@ -15,9 +15,10 @@ def create_scene_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS scene(
         id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-        name                    TEXT NOT NULL, 
+        name                    TEXT NOT NULL UNIQUE, 
+        coverageDistanceMiles       REAL NOT NULL,
         upperRightPositionID    INTEGER NOT NULL REFERENCES coordinate(id), 
-        lowerLeftPositionID     INTEGER NOT NULL REFERENCES coordinate(id) ,
+        lowerLeftPositionID     INTEGER NOT NULL REFERENCES coordinate(id),
         centerPositionID        INTEGER NOT NULL REFERENCES coordinate(id) 
     )
     """
@@ -54,8 +55,8 @@ def create_fog_table(cur: sqlite3.Cursor) -> None:
         typeID INTEGER NOT NULL REFERENCES fog_type(id), 
         sceneID INTEGER NOT NULL REFERENCES scene(id),
         expFogDensity REAL,
-        lienarNearDistance REAL,
-        lienarFarDistance REAL, 
+        linearNearDistance REAL,
+        linearFarDistance REAL, 
         marchedCutoff        REAL,
         marchedDefaultDensity REAL,
         marchedDensityMultiplier REAL,
@@ -116,7 +117,7 @@ def create_environment_light_table(cur: sqlite3.Cursor) -> None:
 
 def create_image_table(cur: sqlite3.Cursor) -> None:
     cmd = """
-    CREATE TABLE IF NOT EXISTS image (
+    CREATE TABLE IF NOT EXISTS image(
         id                      INTEGER PRIMARY KEY AUTOINCREMENT, 
         filePath               TEXT NOT NULL UNIQUE, 
         visibilityDistance     REAL NOT NULL,
