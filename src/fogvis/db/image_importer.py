@@ -59,6 +59,14 @@ class ImageImporter:
             and fp["marchedInfo"]["cutoffValue"] is not None
         ):
             marched_cutoff = float(fp["marchedInfo"]["cutoffValue"])
+
+        name = None
+        if (
+            "fog_volume_name" in self._data
+            and self._data["fog_volume_name"] is not None
+        ):
+            name = self._data["fog_volume_name"]
+
         return FogEntity(
             scene_id=scene_id,
             fog_type_id=fog_type_id,
@@ -76,6 +84,7 @@ class ImageImporter:
             marched_sigmaScattering=float(fp["marchedInfo"]["sigmaScattering"]),
             marched_stepSizeDist=float(fp["marchedInfo"]["stepSizeDist"]),
             marched_stepSizeDist_light=float(fp["marchedInfo"]["stepSizeDist_light"]),
+            volume_name=name,
         )
 
     def read_environment(self, *, fog_id: int = 0) -> EnvironmentEntity:
