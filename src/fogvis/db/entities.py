@@ -258,6 +258,27 @@ class LightEntity:
 class EnvironmentEntity:
     fog_id: int
 
+    def get_does_exist(self, db: Database) -> bool:
+        with closing(db.get_connection().cursor()) as cur:
+            cmd: str = f"""SELECT EXISTS (
+                SELECT 1 FROM environment
+                WHERE fogID = {self.fog_id}
+            )"""
+
+            result = cur.execute(cmd).fetchone()
+            return bool(result[0])
+
+    def get_record_id(self, db: Database) -> int:
+        with closing(db.get_connection().cursor()) as cur:
+            cmd: str = f"""
+                SELECT 1 FROM environment
+                WHERE fogID = {self.fog_id}"""
+
+            result = cur.execute(cmd).fetchone()
+            if result is None:
+                raise Exception("Failed to get record id for environment")
+            return result[0]
+
 
 @dataclass
 class EnvironmentLightEntity:

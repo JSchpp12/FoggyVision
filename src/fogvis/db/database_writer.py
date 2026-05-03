@@ -327,7 +327,10 @@ class DatabaseWriter:
 
             if environment is not None:
                 environment.fog_id = ids["fog"]
-                env_id = DatabaseWriter.write_environment(self.db, environment)
+                if environment.get_does_exist(self.db):
+                    env_id = environment.get_record_id(self.db)
+                else:
+                    env_id = DatabaseWriter.write_environment(self.db, environment)
                 ids["environment"] = env_id
 
                 if "light" in ids:
