@@ -50,13 +50,14 @@ class DatabaseWriter:
         """Insert a scene record and return its row ID."""
         with closing(db.get_connection().cursor()) as cur:
             cur.execute(
-                "INSERT INTO scene (name, coverageDistanceMiles, upperRightPositionID, lowerLeftPositionID, centerPositionID) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO scene (name, coverageDistanceMiles, upperRightPositionID, lowerLeftPositionID, centerPositionID, terrainRenderingType) VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     scene.name,
                     scene.coverage_distance_miles,
                     scene.upper_right_id,
                     scene.lower_left_id,
                     scene.center_id,
+                    scene.terrain_rendering_type,
                 ),
             )
             return cur.lastrowid
@@ -95,74 +96,46 @@ class DatabaseWriter:
     def write_fog(db: Database, fog: FogEntity) -> int | None:
         """Insert a fog record and return its row ID."""
         with closing(db.get_connection().cursor()) as cur:
-            if fog.marched_cutoff is not None:
-                cur.execute(
-                    """
-                    INSERT INTO fog (
-                        typeID,
-                        sceneID,
-                        expFogDensity,
-                        linearNearDistance,
-                        linearFarDistance,
-                        marchedCutoff,
-                        marchedDefaultDensity,
-                        marchedDensityMultiplier,
-                        marchedLightG,
-                        marchedSigmaAbsorption,
-                        marchedSigmaScattering,
-                        marchedStepSizeDist,
-                        marchedStepSizeDistLight
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        fog.fog_type_id,
-                        fog.scene_id,
-                        fog.exp_fog_density,
-                        fog.linear_near_distance,
-                        fog.linear_far_distance,
-                        fog.marched_cutoff or "NULL",
-                        fog.marched_default_density,
-                        fog.marched_density_multiplier,
-                        fog.marched_lightDirG,
-                        fog.marched_sigmaAbsorption,
-                        fog.marched_sigmaScattering,
-                        fog.marched_stepSizeDist,
-                        fog.marched_stepSizeDist_light,
-                    ),
-                )
-            else:
-                cur.execute(
-                    """
-                    INSERT INTO fog (
-                        typeID,
-                        sceneID,
-                        expFogDensity,
-                        linearNearDistance,
-                        linearFarDistance,
-                        marchedDefaultDensity,
-                        marchedDensityMultiplier,
-                        marchedLightG,
-                        marchedSigmaAbsorption,
-                        marchedSigmaScattering,
-                        marchedStepSizeDist,
-                        marchedStepSizeDistLight
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        fog.fog_type_id,
-                        fog.scene_id,
-                        fog.exp_fog_density,
-                        fog.linear_near_distance,
-                        fog.linear_far_distance,
-                        fog.marched_default_density,
-                        fog.marched_density_multiplier,
-                        fog.marched_lightDirG,
-                        fog.marched_sigmaAbsorption,
-                        fog.marched_sigmaScattering,
-                        fog.marched_stepSizeDist,
-                        fog.marched_stepSizeDist_light,
-                    ),
-                )
+            cmd: str = """INSERT INTO fog(
+                typeID,
+                sceneID,
+                expFogDensity,
+                linearNearDistance,
+                linearFarDistance,
+                marchedDefaultDensity,
+                marchedDensityMultiplier,
+                marchedLightG,
+                marchedSigmaAbsorption,
+                marchedSigmaScattering,
+                marchedStepSizeDist,
+                marchedStepSizeDistLight"""
+            params = [
+                fog.fog_type_id,
+                fog.scene_id,
+                fog.exp_fog_density,
+                fog.linear_near_distance,
+                fog.linear_far_distance,
+                fog.marched_default_density,
+                fog.marched_density_multiplier,
+                fog.marched_lightDirG,
+                fog.marched_sigmaAbsorption,
+                fog.marched_sigmaScattering,
+                fog.marched_stepSizeDist,
+                fog.marched_stepSizeDist_light,
+            ]
+            if fog.marched_cutoff is not None: 
+                cmd += ",\n marchedCutoff"
+                params.append(fog.marched_cutoff)
+
+            if fog.volume_name is not None: 
+                cmd += ",\n volumeName"
+                params.append(fog.volume_name)
+            cmd += ") VALUES ("
+            for i in range(len(params)-1):
+                cmd += '?,'
+            cmd += '?)'
+            
+            cur.execute(cmd, params)
             return cur.lastrowid
 
     @staticmethod
@@ -258,6 +231,7 @@ class DatabaseWriter:
         scene_name: str,
         scene_center: CoordinateEntity,
         scene_vis_range: int,
+        scene_rendering_type: str,
         camera: CameraEntity,
         fog: Optional[FogEntity] = None,
         fog_type: Optional[FogTypeEntity] = None,
@@ -282,6 +256,7 @@ class DatabaseWriter:
                 upper_right_id=center_coord,
                 lower_left_id=center_coord,
                 center_id=center_coord,
+                terrain_rendering_type=scene_rendering_type,
             )
 
             if not scene.get_does_exist(self.db):

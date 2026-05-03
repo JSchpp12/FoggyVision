@@ -79,6 +79,7 @@ def parse_image_data_file(filepath: Path) -> dict[str, Any]:
 
     return {
         "scene_name": scene_data.name,
+        "scene_rendering_type": scene_data.rendering_type,
         "scene_center": CoordinateEntity(
             lat=Latitude(str(scene_data.center.x)),
             lon=Longitude(str(scene_data.center.y)),
@@ -101,6 +102,7 @@ def process_image_data(image: InputImage, image_dir: Path) -> dict[str, Any]:
     parsed["image"].file_path = os.path.basename(imported_image_path)
     final_info = {
         "scene_name": parsed["scene_name"],
+        "scene_rendering_type": parsed["scene_rendering_type"],
         "scene_center": parsed["scene_center"],
         "scene_vis_range": parsed["scene_vis_range"],
         "camera": parsed["camera"],

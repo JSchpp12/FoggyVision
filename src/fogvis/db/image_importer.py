@@ -17,11 +17,13 @@ from .entities import (
 )
 
 
-@dataclass 
-class SceneData: 
-    name : str 
-    center : VectorContainer2D
-    vis_range : int
+@dataclass
+class SceneData:
+    name: str
+    rendering_type: str
+    center: VectorContainer2D
+    vis_range: int
+
 
 @dataclass
 class FrameData:
@@ -51,8 +53,11 @@ class ImageImporter:
 
     def read_fog(self, *, fog_type_id: int = 0, scene_id: int = 0) -> FogEntity:
         fp = self._data["fog_params"]
-        marched_cutoff : Optional[float] = None
-        if "cutoffValue" in fp["marchedInfo"]: 
+        marched_cutoff: Optional[float] = None
+        if (
+            "cutoffValue" in fp["marchedInfo"]
+            and fp["marchedInfo"]["cutoffValue"] is not None
+        ):
             marched_cutoff = float(fp["marchedInfo"]["cutoffValue"])
         return FogEntity(
             scene_id=scene_id,
@@ -86,7 +91,7 @@ class ImageImporter:
             type_int = int(self._data["light"]["type"])
             name: str = LIGHT_TYPE_NAMES.get(type_int, f"unknown_{type_int}")
             return LightTypeEntity(name=name)
-        
+
         return None
 
     def read_light(self, *, type_id: int = 0) -> Optional[LightEntity]:
@@ -111,15 +116,16 @@ class ImageImporter:
                 luminance=float(l["luminance"]),
                 type_id=type_id,
             )
-        
+
         return None
 
     def read_scene(self) -> SceneData:
-        center_str : str = json.dumps(self._data["terrain_shape"]["center"])
+        center_str: str = json.dumps(self._data["terrain_shape"]["center"])
         return SceneData(
-            name = self._data["terrain_name"],
-            center = VectorContainer2D.from_json(center_str),
-            vis_range = self._data["terrain_shape"]["view_distance"]
+            name=self._data["terrain_name"],
+            rendering_type=self._data["terrain_shape_type"],
+            center=VectorContainer2D.from_json(center_str),
+            vis_range=self._data["terrain_shape"]["view_distance"],
         )
 
     def read_camera(

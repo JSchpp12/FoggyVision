@@ -19,7 +19,8 @@ def create_scene_table(cur: sqlite3.Cursor) -> None:
         coverageDistanceMiles       REAL NOT NULL,
         upperRightPositionID        INTEGER NOT NULL REFERENCES coordinate(id), 
         lowerLeftPositionID         INTEGER NOT NULL REFERENCES coordinate(id),
-        centerPositionID            INTEGER NOT NULL REFERENCES coordinate(id) 
+        centerPositionID            INTEGER NOT NULL REFERENCES coordinate(id), 
+        terrainRenderingType        TEXT NOT NULL
     )
     """
     cur.execute(cmd)
@@ -64,7 +65,8 @@ def create_fog_table(cur: sqlite3.Cursor) -> None:
         marchedSigmaAbsorption      REAL,
         marchedSigmaScattering      REAL,
         marchedStepSizeDist         REAL,
-        marchedStepSizeDistLight    REAL
+        marchedStepSizeDistLight    REAL,
+        volumeName                  TEXT
     )"""
     cur.execute(cmd)
 
@@ -104,7 +106,6 @@ def create_environment_table(cur: sqlite3.Cursor) -> None:
         fogID   INTEGER NOT NULL REFERENCES fog(id)
     )"""
     cur.execute(cmd)
-
 
 def create_environment_light_table(cur: sqlite3.Cursor) -> None:
     cmd = """

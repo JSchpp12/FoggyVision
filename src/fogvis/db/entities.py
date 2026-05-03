@@ -40,17 +40,21 @@ class SceneEntity:
     upper_right_id: int
     lower_left_id: int
     center_id: int
+    terrain_rendering_type: str
 
     def get_does_exist(self, db: Database) -> bool:
         with closing(db.get_connection().cursor()) as cur:
-            cmd = f"SELECT EXISTS(SELECT 1 FROM scene WHERE name = '{self.name}')"
+            cmd = f"SELECT EXISTS(SELECT 1 FROM scene WHERE name = '{self.name}' AND terrainRenderingType = '{self.terrain_rendering_type}')"
             cur.execute(cmd)
             exists: bool = cur.fetchone()[0]
             return exists
 
     def get_record_id(self, db: Database) -> Optional[int]:
         with closing(db.get_connection().cursor()) as cur:
-            cmd = f"SELECT 1 FROM scene WHERE name = '{self.name}'"
+            cmd = f"""SELECT id FROM scene 
+            WHERE name = '{self.name}' 
+            AND terrainRenderingType = '{self.terrain_rendering_type}'
+            """
             cur.execute(cmd)
 
             result = cur.fetchone()
@@ -75,6 +79,7 @@ class SceneEntity:
                 upper_right_id=result[3],
                 lower_left_id=result[4],
                 center_id=result[5],
+                terrain_rendering_type=result[6],
             )
 
 
@@ -93,6 +98,7 @@ class CameraEntity:
             cmd: str = f"""SELECT EXISTS (SELECT 1 FROM camera WHERE 
             virtualPosition = '{self.virtual_position.to_json()}'
             AND lookDir = '{self.look_dir.to_json()}'
+            AND sceneID = '{self.scene_id}'
             )"""
             cur.execute(cmd)
 
@@ -100,9 +106,11 @@ class CameraEntity:
 
     def get_record_id(self, db: Database) -> Optional[int]:
         with closing(db.get_connection().cursor()) as cur:
-            cmd: str = (
-                f"""SELECT id FROM camera WHERE virtualPosition = '{self.virtual_position.to_json()}' AND lookDir = '{self.look_dir.to_json()}'"""
-            )
+            cmd: str = f"""SELECT id FROM camera 
+                WHERE virtualPosition = '{self.virtual_position.to_json()}' 
+                AND lookDir = '{self.look_dir.to_json()}'
+                AND sceneID = '{self.scene_id}'
+                """
             cur.execute(cmd)
 
             result = cur.fetchone()
@@ -148,6 +156,7 @@ class FogEntity:
     marched_sigmaScattering: float
     marched_stepSizeDist: float
     marched_stepSizeDist_light: float
+    volume_name: Optional[str] = None
 
     def get_does_exist(self, db: Database) -> bool:
         with closing(db.get_connection().cursor()) as cur:
@@ -172,6 +181,11 @@ class FogEntity:
                 cmd += f"AND marchedCutoff IS NULL\n"
             else:
                 cmd += f"AND marchedCutoff = {self.marched_cutoff}\n"
+
+            if self.volume_name is None:
+                cmd += "AND volumeName IS NULL\n"
+            else:
+                cmd += f"AND volumeName = '{self.volume_name}'\n"
 
             cmd += ")"
             params = (
@@ -214,6 +228,11 @@ class FogEntity:
                 cmd += f"AND marchedCutoff IS NULL\n"
             else:
                 cmd += f"AND marchedCutoff = {self.marched_cutoff}\n"
+
+            if self.volume_name is None:
+                cmd += "AND volumeName IS NULL\n"
+            else:
+                cmd += f"AND volumeName = '{self.volume_name}'\n"
 
             params = (
                 self.scene_id,
