@@ -18,18 +18,18 @@ class CoordinateEntity:
     def get_does_exist(self, db: Database) -> bool:
         with closing(db.get_connection().cursor()) as cur:
             cur.execute(
-                f"SELECT EXISTS(SELECT 1 FROM coordinate WHERE lat = {self.lat} AND lon = {self.lon})"
+                f"SELECT EXISTS(SELECT 1 FROM coordinate WHERE lat = {self.lat.value} AND lon = {self.lon.value})"
             )
             return cur.fetchone()[0]
 
-    def get_record_id(self, db: Database) -> Optional[int]:
+    def get_record_id(self, db: Database) -> int:
         with closing(db.get_connection().cursor()) as cur:
             cmd = f"SELECT id FROM coordinate WHERE lat = {self.lat.value} AND lon = {self.lon.value}"
             cur.execute(cmd)
 
             result = cur.fetchone()
             if result is None:
-                return None
+                raise Exception("Failed to retreive record")
             return result[0]
 
 
@@ -118,7 +118,9 @@ class FogTypeEntity:
 
     def get_does_exist(self, db: Database) -> bool:
         with closing(db.get_connection().cursor()) as cur:
-            cmd: str = f"SELECT EXISTS (SELECT 1 FROM fog_type WHERE name = '{self.name}')"
+            cmd: str = (
+                f"SELECT EXISTS (SELECT 1 FROM fog_type WHERE name = '{self.name}')"
+            )
             return cur.execute(cmd).fetchone()[0]
 
     def get_record_id(self, db: Database) -> Optional[int]:
@@ -149,31 +151,76 @@ class FogEntity:
 
     def get_does_exist(self, db: Database) -> bool:
         with closing(db.get_connection().cursor()) as cur:
-            cmd: str = """
+            cmd = f"""
                 SELECT EXISTS (
-                    SELECT 1 FROM fog
-                    WHERE sceneID = ?
+                SELECT 1
+                FROM fog
+                WHERE sceneID = ?
                     AND typeID = ?
                     AND expFogDensity = ?
                     AND linearNearDistance = ?
                     AND linearFarDistance = ?
-                    AND marchedCutoff = ?
                     AND marchedDefaultDensity = ?
                     AND marchedDensityMultiplier = ?
                     AND marchedLightG = ?
                     AND marchedSigmaAbsorption = ?
                     AND marchedSigmaScattering = ?
                     AND marchedStepSizeDist = ?
-                    AND marchedStepSizeDistLight = ?
-                )
+                    AND marchedStepSizeDistLight = ?\n
             """
+            if self.marched_cutoff is None:
+                cmd += f"AND marchedCutoff IS NULL\n"
+            else:
+                cmd += f"AND marchedCutoff = {self.marched_cutoff}\n"
+
+            cmd += ")"
             params = (
                 self.scene_id,
                 self.fog_type_id,
                 self.exp_fog_density,
                 self.linear_near_distance,
                 self.linear_far_distance,
-                self.marched_cutoff,
+                self.marched_default_density,
+                self.marched_density_multiplier,
+                self.marched_lightDirG,
+                self.marched_sigmaAbsorption,
+                self.marched_sigmaScattering,
+                self.marched_stepSizeDist,
+                self.marched_stepSizeDist_light,
+            )
+
+            result = cur.execute(cmd, params).fetchone()
+            return bool(result[0])
+
+    def get_record_id(self, db: Database) -> int:
+        with closing(db.get_connection().cursor()) as cur:
+            cmd = f"""
+                SELECT id
+                FROM fog
+                WHERE sceneID = ?
+                    AND typeID = ?
+                    AND expFogDensity = ?
+                    AND linearNearDistance = ?
+                    AND linearFarDistance = ?
+                    AND marchedDefaultDensity = ?
+                    AND marchedDensityMultiplier = ?
+                    AND marchedLightG = ?
+                    AND marchedSigmaAbsorption = ?
+                    AND marchedSigmaScattering = ?
+                    AND marchedStepSizeDist = ?
+                    AND marchedStepSizeDistLight = ?\n
+            """
+            if self.marched_cutoff is None:
+                cmd += f"AND marchedCutoff IS NULL\n"
+            else:
+                cmd += f"AND marchedCutoff = {self.marched_cutoff}\n"
+
+            params = (
+                self.scene_id,
+                self.fog_type_id,
+                self.exp_fog_density,
+                self.linear_near_distance,
+                self.linear_far_distance,
                 self.marched_default_density,
                 self.marched_density_multiplier,
                 self.marched_lightDirG,
@@ -183,7 +230,9 @@ class FogEntity:
                 self.marched_stepSizeDist_light,
             )
             result = cur.execute(cmd, params).fetchone()
-            return bool(result[0])
+            if result is None:
+                raise Exception("Failed to get record id")
+            return result[0]
 
 
 @dataclass

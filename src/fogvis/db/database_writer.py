@@ -32,13 +32,17 @@ class DatabaseWriter:
             self.cur = None
 
     @staticmethod
-    def write_coordinate(db: Database, coordinate: CoordinateEntity) -> int | None:
+    def write_coordinate(db: Database, coordinate: CoordinateEntity) -> int:
         """Insert a coordinate record and return its row ID."""
         with closing(db.get_connection().cursor()) as cur:
+            cmd = f"INSERT INTO coordinate (lat, lon) VALUES (?, ?)"
             cur.execute(
-                "INSERT INTO coordinate (lat, lon) VALUES (?, ?)",
+                cmd,
                 (coordinate.lat.value, coordinate.lon.value),
             )
+            if cur.lastrowid is None:
+                raise Exception("Failed to retreive newly inserted row record")
+
             return cur.lastrowid
 
     @staticmethod
@@ -91,40 +95,74 @@ class DatabaseWriter:
     def write_fog(db: Database, fog: FogEntity) -> int | None:
         """Insert a fog record and return its row ID."""
         with closing(db.get_connection().cursor()) as cur:
-            cur.execute(
-                """
-                INSERT INTO fog (
-                    typeID,
-                    sceneID,
-                    expFogDensity,
-                    linearNearDistance,
-                    linearFarDistance,
-                    marchedCutoff,
-                    marchedDefaultDensity,
-                    marchedDensityMultiplier,
-                    marchedLightG,
-                    marchedSigmaAbsorption,
-                    marchedSigmaScattering,
-                    marchedStepSizeDist,
-                    marchedStepSizeDistLight
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    fog.fog_type_id,
-                    fog.scene_id,
-                    fog.exp_fog_density,
-                    fog.linear_near_distance,
-                    fog.linear_far_distance,
-                    fog.marched_cutoff or "NULL",
-                    fog.marched_default_density,
-                    fog.marched_density_multiplier,
-                    fog.marched_lightDirG,
-                    fog.marched_sigmaAbsorption,
-                    fog.marched_sigmaScattering,
-                    fog.marched_stepSizeDist,
-                    fog.marched_stepSizeDist_light,
-                ),
-            )
+            if fog.marched_cutoff is not None:
+                cur.execute(
+                    """
+                    INSERT INTO fog (
+                        typeID,
+                        sceneID,
+                        expFogDensity,
+                        linearNearDistance,
+                        linearFarDistance,
+                        marchedCutoff,
+                        marchedDefaultDensity,
+                        marchedDensityMultiplier,
+                        marchedLightG,
+                        marchedSigmaAbsorption,
+                        marchedSigmaScattering,
+                        marchedStepSizeDist,
+                        marchedStepSizeDistLight
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        fog.fog_type_id,
+                        fog.scene_id,
+                        fog.exp_fog_density,
+                        fog.linear_near_distance,
+                        fog.linear_far_distance,
+                        fog.marched_cutoff or "NULL",
+                        fog.marched_default_density,
+                        fog.marched_density_multiplier,
+                        fog.marched_lightDirG,
+                        fog.marched_sigmaAbsorption,
+                        fog.marched_sigmaScattering,
+                        fog.marched_stepSizeDist,
+                        fog.marched_stepSizeDist_light,
+                    ),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO fog (
+                        typeID,
+                        sceneID,
+                        expFogDensity,
+                        linearNearDistance,
+                        linearFarDistance,
+                        marchedDefaultDensity,
+                        marchedDensityMultiplier,
+                        marchedLightG,
+                        marchedSigmaAbsorption,
+                        marchedSigmaScattering,
+                        marchedStepSizeDist,
+                        marchedStepSizeDistLight
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        fog.fog_type_id,
+                        fog.scene_id,
+                        fog.exp_fog_density,
+                        fog.linear_near_distance,
+                        fog.linear_far_distance,
+                        fog.marched_default_density,
+                        fog.marched_density_multiplier,
+                        fog.marched_lightDirG,
+                        fog.marched_sigmaAbsorption,
+                        fog.marched_sigmaScattering,
+                        fog.marched_stepSizeDist,
+                        fog.marched_stepSizeDist_light,
+                    ),
+                )
             return cur.lastrowid
 
     @staticmethod
@@ -232,20 +270,18 @@ class DatabaseWriter:
 
         with closing(self.db.get_connection().cursor()) as cur:
             # 1. Scene
-            center_coord = scene_center.get_record_id(self.db)
+            center_coord: int = 0
+            if scene_center.get_does_exist(self.db):
+                center_coord = scene_center.get_record_id(self.db)
+            else:
+                center_coord = DatabaseWriter.write_coordinate(self.db, scene_center)
 
             scene: SceneEntity = SceneEntity(
                 name=scene_name,
                 coverage_distance_miles=scene_vis_range,
-                upper_right_id=center_coord
-                or DatabaseWriter.write_coordinate(self.db, scene_center)
-                or 0,
-                lower_left_id=center_coord
-                or DatabaseWriter.write_coordinate(self.db, scene_center)
-                or 0,
-                center_id=center_coord
-                or DatabaseWriter.write_coordinate(self.db, scene_center)
-                or 0,
+                upper_right_id=center_coord,
+                lower_left_id=center_coord,
+                center_id=center_coord,
             )
 
             if not scene.get_does_exist(self.db):
@@ -254,9 +290,12 @@ class DatabaseWriter:
                 ids["scene"] = scene.get_record_id(self.db)
 
             # 2. Camera position + camera
-            ids["camera_position"] = DatabaseWriter.write_coordinate(
-                self.db, scene_center
-            )
+            ids["camera_position"] = center_coord
+            if camera.virtual_position.x != 0 or camera.virtual_position.z != 0:
+                raise Exception(
+                    "Assuming that the camera is located at the terrain center"
+                )
+
             camera.scene_id = ids["scene"]
             camera.position_id = ids["camera_position"]
             if camera.get_does_exist(self.db):
@@ -275,7 +314,10 @@ class DatabaseWriter:
                         DatabaseWriter.write_fog_type(self.db, fog_type) or 0
                     )
 
-                ids["fog"] = DatabaseWriter.write_fog(self.db, fog)
+                if fog.get_does_exist(self.db):
+                    ids["fog"] = fog.get_record_id(self.db)
+                else:
+                    ids["fog"] = DatabaseWriter.write_fog(self.db, fog)
 
             if light:
                 light.type_id = (
