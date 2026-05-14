@@ -11,6 +11,15 @@ requires-python = ">=3.12"
 authors = [
   {name = "Jacob Schaupp", email = "jacob.schaupp@gmail.com"}
 ]
+dependencies = [
+  "torch",
+  "Pillow",
+  "matplotlib",
+  "scipy",
+  "opencv-python",
+  "tqdm",
+  "numpy",
+]
 
 [project.scripts]
 fogvis-cli = "fogvis.cli:main"
