@@ -31,7 +31,7 @@ class InputImage:
     image_data_file_path: Path
 
 
-def collect_input_images(root_dir: str | Path) -> list[InputImage]:
+def collect_input_images(root_dir: str) -> list:
     """
     Recurse through a directory and its children, collecting all .png files
     and their partner .json files into InputImage dataclasses.
