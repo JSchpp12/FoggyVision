@@ -157,6 +157,9 @@ class FogEntity:
     marched_stepSizeDist: float
     marched_stepSizeDist_light: float
     volume_name: Optional[str] = None
+    volume_position: Optional[VectorContainer3D] = None
+    volume_rotation: Optional[VectorContainer3D] = None
+    volume_scale: Optional[VectorContainer3D] = None
 
     def get_does_exist(self, db: Database) -> bool:
         with closing(db.get_connection().cursor()) as cur:
@@ -186,6 +189,21 @@ class FogEntity:
                 cmd += "AND volumeName IS NULL\n"
             else:
                 cmd += f"AND volumeName = '{self.volume_name}'\n"
+
+            if self.volume_position is None:
+                cmd += "AND volumePosition IS NULL\n"
+            else:
+                cmd += f"AND volumePosition = '{self.volume_position.to_json()}'\n"
+
+            if self.volume_rotation is None:
+                cmd += "AND volumeRotation IS NULL\n"
+            else:
+                cmd += f"AND volumeRotation = '{self.volume_rotation.to_json()}'\n"
+
+            if self.volume_scale is None:
+                cmd += "AND volumeScale IS NULL\n"
+            else:
+                cmd += f"AND volumeScale = '{self.volume_scale.to_json()}'\n"
 
             cmd += ")"
             params = (

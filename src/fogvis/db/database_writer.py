@@ -46,7 +46,7 @@ class DatabaseWriter:
             return cur.lastrowid
 
     @staticmethod
-    def write_scene(db: Database, scene: SceneEntity) -> int | None:
+    def write_scene(db: Database, scene: SceneEntity) -> int:
         """Insert a scene record and return its row ID."""
         with closing(db.get_connection().cursor()) as cur:
             cur.execute(
@@ -63,7 +63,7 @@ class DatabaseWriter:
             return cur.lastrowid
 
     @staticmethod
-    def write_camera(db: Database, cam: CameraEntity) -> int | None:
+    def write_camera(db: Database, cam: CameraEntity) -> int:
         """Insert a camera record and return its row ID."""
         with closing(db.get_connection().cursor()) as cur:
             cur.execute(
@@ -83,7 +83,7 @@ class DatabaseWriter:
             return cur.lastrowid
 
     @staticmethod
-    def write_fog_type(db: Database, ft: FogTypeEntity) -> int | None:
+    def write_fog_type(db: Database, ft: FogTypeEntity) -> int:
         """Insert a fog type record and return its row ID."""
         with closing(db.get_connection().cursor()) as cur:
             cur.execute(
@@ -93,7 +93,7 @@ class DatabaseWriter:
             return cur.lastrowid
 
     @staticmethod
-    def write_fog(db: Database, fog: FogEntity) -> int | None:
+    def write_fog(db: Database, fog: FogEntity) -> int:
         """Insert a fog record and return its row ID."""
         with closing(db.get_connection().cursor()) as cur:
             cmd: str = """INSERT INTO fog(
@@ -123,23 +123,23 @@ class DatabaseWriter:
                 fog.marched_stepSizeDist,
                 fog.marched_stepSizeDist_light,
             ]
-            if fog.marched_cutoff is not None: 
+            if fog.marched_cutoff is not None:
                 cmd += ",\n marchedCutoff"
                 params.append(fog.marched_cutoff)
 
-            if fog.volume_name is not None: 
+            if fog.volume_name is not None:
                 cmd += ",\n volumeName"
                 params.append(fog.volume_name)
             cmd += ") VALUES ("
-            for i in range(len(params)-1):
-                cmd += '?,'
-            cmd += '?)'
-            
+            for i in range(len(params) - 1):
+                cmd += "?,"
+            cmd += "?)"
+
             cur.execute(cmd, params)
             return cur.lastrowid
 
     @staticmethod
-    def write_light_type(db: Database, lt: LightTypeEntity) -> int | None:
+    def write_light_type(db: Database, lt: LightTypeEntity) -> int:
         """Insert a light type record and return its row ID."""
         with closing(db.get_connection().cursor()) as cur:
             cur.execute(
@@ -149,7 +149,7 @@ class DatabaseWriter:
             return cur.lastrowid
 
     @staticmethod
-    def write_light(db: Database, light: LightEntity) -> int | None:
+    def write_light(db: Database, light: LightEntity) -> int:
         """Insert a light record and return its row ID."""
         with closing(db.get_connection().cursor()) as cur:
             cur.execute(
@@ -183,7 +183,7 @@ class DatabaseWriter:
             return cur.lastrowid
 
     @staticmethod
-    def write_environment(db: Database, environment: EnvironmentEntity) -> int | None:
+    def write_environment(db: Database, environment: EnvironmentEntity) -> int:
         """Insert an environment record and return its row ID."""
         with closing(db.get_connection().cursor()) as cur:
             cur.execute(f"""
@@ -195,7 +195,7 @@ class DatabaseWriter:
     @staticmethod
     def write_environment_light(
         db: Database, environment_light: EnvironmentLightEntity
-    ) -> int | None:
+    ) -> int:
         """Insert an environment–light association and return its row ID."""
         with closing(db.get_connection().cursor()) as cur:
             cur.execute(
@@ -208,7 +208,7 @@ class DatabaseWriter:
             return cur.lastrowid
 
     @staticmethod
-    def write_image(db: Database, image: ImageEntity) -> int | None:
+    def write_image(db: Database, image: ImageEntity) -> int:
         """Insert an image record and return its row ID."""
         with closing(db.get_connection().cursor()) as cur:
             cur.execute(
@@ -240,7 +240,7 @@ class DatabaseWriter:
         environment: Optional[EnvironmentEntity] = None,
         images: Optional[list[ImageEntity]] = None,
     ) -> dict[str, int]:
-        ids: dict[str, int | None] = {}
+        ids: dict[str, int] = {}
 
         with closing(self.db.get_connection().cursor()) as cur:
             # 1. Scene
