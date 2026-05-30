@@ -95,29 +95,50 @@ class CameraEntity:
 
     def get_does_exist(self, db: Database) -> bool:
         with closing(db.get_connection().cursor()) as cur:
-            cmd: str = f"""SELECT EXISTS (SELECT 1 FROM camera WHERE 
-            virtualPosition = '{self.virtual_position.to_json()}'
-            AND lookDir = '{self.look_dir.to_json()}'
-            AND sceneID = '{self.scene_id}'
-            )"""
-            cur.execute(cmd)
-
-            return cur.fetchone()[0]
+            cmd = """
+                SELECT EXISTS (
+                    SELECT 1 FROM camera
+                    WHERE virtualPosition = ?
+                    AND lookDir = ?
+                    AND sceneID = ?
+                    AND fov = ?
+                    AND nearClip = ?
+                    AND farClip = ?
+                )
+            """
+            params = (
+                self.virtual_position.to_json(),
+                self.look_dir.to_json(),
+                self.scene_id,
+                self.fov,
+                self.near_clip,
+                self.far_clip,
+            )
+            cur.execute(cmd, params)
+            return bool(cur.fetchone()[0])
 
     def get_record_id(self, db: Database) -> Optional[int]:
         with closing(db.get_connection().cursor()) as cur:
-            cmd: str = f"""SELECT id FROM camera 
-                WHERE virtualPosition = '{self.virtual_position.to_json()}' 
-                AND lookDir = '{self.look_dir.to_json()}'
-                AND sceneID = '{self.scene_id}'
-                """
-            cur.execute(cmd)
-
+            cmd = """
+                SELECT id FROM camera
+                WHERE virtualPosition = ?
+                AND lookDir = ?
+                AND sceneID = ?
+                AND fov = ?
+                AND nearClip = ?
+                AND farClip = ?
+            """
+            params = (
+                self.virtual_position.to_json(),
+                self.look_dir.to_json(),
+                self.scene_id,
+                self.fov,
+                self.near_clip,
+                self.far_clip,
+            )
+            cur.execute(cmd, params)
             result = cur.fetchone()
-            if result is None:
-                return None
-            else:
-                return result[0]
+            return None if result is None else result[0]
 
 
 @dataclass
@@ -276,6 +297,22 @@ class FogEntity:
 class LightTypeEntity:
     name: str
 
+    def get_does_exist(self, db: Database) -> bool:
+        with closing(db.get_connection().cursor()) as cur:
+            cmd: str = """SELECT EXISTS (SELECT 1 FROM light_type WHERE name = ?)"""
+            params = [self.name]
+
+            res = cur.execute(cmd, params).fetchone()
+            return bool(res[0])
+
+    def get_record_id(self, db: Database) -> int:
+        with closing(db.get_connection().cursor()) as cur:
+            cmd: str = """SELECT id FROM light_type WHERE name = ?"""
+            params = [self.name]
+
+            res = cur.execute(cmd, params).fetchone()
+            return int(res[0])
+
 
 @dataclass
 class LightEntity:
@@ -289,6 +326,60 @@ class LightEntity:
     outerDiameter: float
     luminance: float
     type_id: int
+
+    def get_record_id(self, db: Database) -> int:
+        with closing(db.get_connection().cursor()) as cur:
+            cmd: str = """SELECT id FROM light WHERE 
+                ambient = ? AND
+                diffuse = ?  AND 
+                specular = ? AND
+                virtualDirection = ? AND
+                virtualPosition = ? AND
+                innerDiameter = ? AND
+                outerDiameter = ? AND
+                luminance = ? AND
+                typeID = ?"""
+            parms = (
+                self.ambient.to_json(),
+                self.diffuse.to_json(),
+                self.specular.to_json(),
+                self.virtualDirection.to_json(),
+                self.virtualPosition.to_json(),
+                self.innerDiameter,
+                self.outerDiameter,
+                self.luminance,
+                self.type_id,
+            )
+            result = cur.execute(cmd, parms).fetchone()
+            return int(result[0])
+
+    def get_does_exist(self, db: Database) -> bool:
+        with closing(db.get_connection().cursor()) as cur:
+            cmd: str = """SELECT EXISTS (SELECT 1 FROM light WHERE
+                ambient = ? AND
+                diffuse = ?  AND 
+                specular = ? AND
+                virtualDirection = ? AND
+                virtualPosition = ? AND
+                innerDiameter = ? AND
+                outerDiameter = ? AND
+                luminance = ? AND
+                typeID = ?
+                )"""
+
+            parms = (
+                self.ambient.to_json(),
+                self.diffuse.to_json(),
+                self.specular.to_json(),
+                self.virtualDirection.to_json(),
+                self.virtualPosition.to_json(),
+                self.innerDiameter,
+                self.outerDiameter,
+                self.luminance,
+                self.type_id,
+            )
+            result = cur.execute(cmd, parms).fetchone()
+            return bool(result[0])
 
 
 @dataclass
@@ -308,7 +399,7 @@ class EnvironmentEntity:
     def get_record_id(self, db: Database) -> int:
         with closing(db.get_connection().cursor()) as cur:
             cmd: str = f"""
-                SELECT 1 FROM environment
+                SELECT id FROM environment
                 WHERE fogID = {self.fog_id}"""
 
             result = cur.execute(cmd).fetchone()
@@ -333,8 +424,20 @@ class ImageEntity:
 
     def get_does_exist(self, db: Database) -> bool:
         with closing(db.get_connection().cursor()) as cur:
-            cmd: str = (
-                f"SELECT EXISTS(SELECT 1 FROM image WHERE filePath = '{self.file_path}')"
+            cmd: str = """SELECT EXISTS(SELECT 1 FROM image WHERE 
+                    filePath = ? AND 
+                    visibilityDistance = ? AND
+                    cameraID = ? AND
+                    sceneID = ? AND
+                    environmentID = ?
+                    )"""
+
+            parms = (
+                self.file_path,
+                self.visibility_distance,
+                self.camera_id,
+                self.scene_id,
+                self.environment_id,
             )
-            cur.execute(cmd)
+            cur.execute(cmd, parms)
             return cur.fetchone()[0]

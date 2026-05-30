@@ -15,12 +15,13 @@ def create_scene_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS scene(
         id                          INTEGER PRIMARY KEY AUTOINCREMENT,
-        name                        TEXT NOT NULL UNIQUE,
+        name                        TEXT NOT NULL,
         coverageDistanceMiles       REAL NOT NULL,
         upperRightPositionID        INTEGER NOT NULL REFERENCES coordinate(id),
         lowerLeftPositionID         INTEGER NOT NULL REFERENCES coordinate(id),
         centerPositionID            INTEGER NOT NULL REFERENCES coordinate(id),
-        terrainRenderingType        TEXT NOT NULL
+        terrainRenderingType        TEXT NOT NULL,
+        UNIQUE(name, terrainRenderingType)
     )
     """
     cur.execute(cmd)

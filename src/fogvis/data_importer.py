@@ -22,8 +22,6 @@ from typing import Any
 # used to shutdown the writer thread
 _DONE = object()
 
-DB_FILE_NAME: str = "database.sqlite3"
-
 
 @dataclass
 class InputImage:
@@ -147,11 +145,10 @@ def process_files(
     max_workers: int = 16,
 ):
     write_queue = queue.Queue(maxsize=500)
-    db_file_path = os.path.join(db_dir, DB_FILE_NAME)
     total = len(importFilePaths)
 
     writer = threading.Thread(
-        target=writer_thread, args=(db_file_path, write_queue), daemon=True
+        target=writer_thread, args=(db_dir, write_queue), daemon=True
     )
     writer.start()
 
@@ -180,14 +177,11 @@ def init_db(db_file_path: Path):
 def main(db_dir: Path, import_dir: Path):
     if not os.path.exists(import_dir):
         raise Exception("Import image directory does not exist")
-
-    db_file_path: Optional[Path] = None
-    if not os.path.exists(db_dir):
-        logging.info("Database does not exist. Initializing")
-        db_file_path = Path(os.path.join(db_dir, DB_FILE_NAME))
-        os.makedirs(db_dir, exist_ok=True)
-        init_db(db_file_path)
-
+    
+    init_db(db_dir)
+    if not os.path.isdir(db_dir):
+        os.makedirs(db_dir)
+        
     inputs = collect_input_images(import_dir)
     image_output_dir: Path = Path(os.path.join(db_dir, "images"))
     if not os.path.exists(image_output_dir):
