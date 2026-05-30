@@ -116,10 +116,10 @@ def process_image_data(image: InputImage, image_dir: Path) -> dict[str, Any]:
 
 
 def writer_thread(
-    db_path: Path, write_queue: queue.Queue, batch_size: int = 50
+    d : Database, write_queue: queue.Queue, batch_size: int = 50
 ) -> None:
     """Single dedicated thread — owns all DB access."""
-    writer = DatabaseWriter(db_path)
+    writer = DatabaseWriter(d)
     batch = []
 
     with writer.db as db:
@@ -140,15 +140,18 @@ def writer_thread(
 
 def process_files(
     importFilePaths: list[InputImage],
-    target_output_dir: list[Path],
     db_dir: Path,
     max_workers: int = 16,
 ):
     write_queue = queue.Queue(maxsize=500)
     total = len(importFilePaths)
+    target_output_dir : list[Path] = []
+    db = Database(db_dir)
+    for f in importFilePaths:
+        target_output_dir.append(db.import_dir)
 
     writer = threading.Thread(
-        target=writer_thread, args=(db_dir, write_queue), daemon=True
+        target=writer_thread, args=(db, write_queue), daemon=True
     )
     writer.start()
 
@@ -187,8 +190,4 @@ def main(db_dir: Path, import_dir: Path):
     if not os.path.exists(image_output_dir):
         os.makedirs(image_output_dir)
 
-    target_dirs = []
-    for input in inputs:
-        target_dirs.append(image_output_dir)
-
-    process_files(inputs, target_dirs, db_dir)
+    process_files(inputs, db_dir)

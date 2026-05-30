@@ -19,8 +19,8 @@ from .entities import (
 
 
 class DatabaseWriter:
-    def __init__(self, db_path: os.PathLike) -> None:
-        self.db: Database = Database(db_path)
+    def __init__(self, db : Database) -> None:
+        self.db = db
         self.cur: Optional[Cursor] = None
 
     def __enter__(self):

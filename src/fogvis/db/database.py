@@ -33,6 +33,7 @@ class Database:
 
     def __init__(self, db_path: os.PathLike) -> None:
         self.db_path: os.PathLike = self.Prep_DB_Path(db_path)
+        self.import_dir : Path = Path(os.path.join(Path(self.db_path).parent), "images")
         self.conn: Optional[sqlite3.Connection] = None
 
     def __enter__(self) -> sqlite3.Connection:
