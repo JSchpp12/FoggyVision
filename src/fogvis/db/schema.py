@@ -111,6 +111,7 @@ def create_environment_table(cur: sqlite3.Cursor) -> None:
     )"""
     cur.execute(cmd)
 
+
 def create_environment_light_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS environment_light(

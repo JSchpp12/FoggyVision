@@ -19,18 +19,18 @@ from .schema import (
 
 DB_FILE_NAME: str = "database.sqlite3"
 
+
 class Database:
 
     @staticmethod
-    def Prep_DB_Path(db_path : os.PathLike) -> os.PathLike: 
+    def Prep_DB_Path(db_path: os.PathLike) -> os.PathLike:
         if os.path.isfile(db_path):
             return db_path
         else:
-            if not os.path.exists(db_path): 
+            if not os.path.exists(db_path):
                 os.makedirs(db_path)
             return Path(os.path.join(db_path, DB_FILE_NAME))
 
-            
     def __init__(self, db_path: os.PathLike) -> None:
         self.db_path: os.PathLike = self.Prep_DB_Path(db_path)
         self.conn: Optional[sqlite3.Connection] = None
