@@ -4,8 +4,8 @@ import sqlite3
 def create_coordinate_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS coordinate(
-        id      INTEGER PRIMARY KEY AUTOINCREMENT, 
-        lat     REAL NOT NULL, 
+        id      INTEGER PRIMARY KEY AUTOINCREMENT,
+        lat     REAL NOT NULL,
         lon     REAL NOT NULL
     )"""
     cur.execute(cmd)
@@ -15,12 +15,13 @@ def create_scene_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS scene(
         id                          INTEGER PRIMARY KEY AUTOINCREMENT,
-        name                        TEXT NOT NULL UNIQUE, 
+        name                        TEXT NOT NULL,
         coverageDistanceMiles       REAL NOT NULL,
-        upperRightPositionID        INTEGER NOT NULL REFERENCES coordinate(id), 
+        upperRightPositionID        INTEGER NOT NULL REFERENCES coordinate(id),
         lowerLeftPositionID         INTEGER NOT NULL REFERENCES coordinate(id),
-        centerPositionID            INTEGER NOT NULL REFERENCES coordinate(id), 
-        terrainRenderingType        TEXT NOT NULL
+        centerPositionID            INTEGER NOT NULL REFERENCES coordinate(id),
+        terrainRenderingType        TEXT NOT NULL,
+        UNIQUE(name, terrainRenderingType)
     )
     """
     cur.execute(cmd)
@@ -29,12 +30,12 @@ def create_scene_table(cur: sqlite3.Cursor) -> None:
 def create_camera_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS camera (
-        id                  INTEGER PRIMARY KEY AUTOINCREMENT, 
-        virtualPosition     TEXT NOT NULL, 
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        virtualPosition     TEXT NOT NULL,
         sceneID             INTEGER REFERENCES scene(id) NOT NULL,
         lookDir             TEXT NOT NULL,
         fov REAL,
-        nearClip REAL, 
+        nearClip REAL,
         farClip REAL
     )"""
     cur.execute(cmd)
@@ -43,7 +44,7 @@ def create_camera_table(cur: sqlite3.Cursor) -> None:
 def create_fog_type_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS fog_type (
-        id              INTEGER PRIMARY KEY AUTOINCREMENT, 
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
         name            TEXT NOT NULL
     )"""
     cur.execute(cmd)
@@ -52,12 +53,12 @@ def create_fog_type_table(cur: sqlite3.Cursor) -> None:
 def create_fog_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS fog (
-        id                          INTEGER PRIMARY KEY AUTOINCREMENT, 
-        typeID                      INTEGER NOT NULL REFERENCES fog_type(id), 
+        id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+        typeID                      INTEGER NOT NULL REFERENCES fog_type(id),
         sceneID                     INTEGER NOT NULL REFERENCES scene(id),
         expFogDensity               REAL,
         linearNearDistance          REAL,
-        linearFarDistance           REAL, 
+        linearFarDistance           REAL,
         marchedCutoff               REAL,
         marchedDefaultDensity       REAL,
         marchedDensityMultiplier    REAL,
@@ -66,7 +67,10 @@ def create_fog_table(cur: sqlite3.Cursor) -> None:
         marchedSigmaScattering      REAL,
         marchedStepSizeDist         REAL,
         marchedStepSizeDistLight    REAL,
-        volumeName                  TEXT
+        volumeName                  TEXT,
+        volumePosition              TEXT,
+        volumeRotation              TEXT,
+        volumeScale                 TEXT
     )"""
     cur.execute(cmd)
 
@@ -74,7 +78,7 @@ def create_fog_table(cur: sqlite3.Cursor) -> None:
 def create_light_type_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS light_type(
-        id      INTEGER PRIMARY KEY AUTOINCREMENT, 
+        id      INTEGER PRIMARY KEY AUTOINCREMENT,
         name    TEXT NOT NULL
     )
     """
@@ -107,6 +111,7 @@ def create_environment_table(cur: sqlite3.Cursor) -> None:
     )"""
     cur.execute(cmd)
 
+
 def create_environment_light_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS environment_light(
@@ -119,11 +124,11 @@ def create_environment_light_table(cur: sqlite3.Cursor) -> None:
 def create_image_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS image(
-        id                     INTEGER PRIMARY KEY AUTOINCREMENT, 
-        filePath               TEXT NOT NULL UNIQUE, 
+        id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+        filePath               TEXT NOT NULL UNIQUE,
         visibilityDistance     REAL NOT NULL,
         cameraID               INTEGER NOT NULL REFERENCES camera(id),
         sceneID                INTEGER NOT NULL REFERENCES scene(id),
-        environmentID          INTEGER NOT NULL REFERENCES environment(id) 
+        environmentID          INTEGER NOT NULL REFERENCES environment(id)
     )"""
     cur.execute(cmd)

@@ -19,6 +19,7 @@ def main():
     args = parser.parse_args()
     image_dir: Path = Path(args.images)
     database_dir: Path = Path(args.database)
+
     import_main(import_dir=image_dir, db_dir=database_dir)
 
 
