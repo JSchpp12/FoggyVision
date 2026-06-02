@@ -15,6 +15,7 @@ import shutil
 import queue
 import threading
 import logging
+from PIL import Image
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -93,11 +94,20 @@ def parse_image_data_file(filepath: Path) -> dict[str, Any]:
     }
 
 
+def Get_Image_Metadata(img_path):
+    with Image.open(img_path) as img:
+        return img.size
+
+
 def process_image_data(image: InputImage, image_dir: Path) -> dict[str, Any]:
     imported_image_path: Path = move_image_into_db_dir(image.image_path, image_dir)
     parsed = parse_image_data_file(image.image_data_file_path)
 
+    width, height = Get_Image_Metadata(imported_image_path)
     parsed["image"].file_path = os.path.basename(imported_image_path)
+    parsed["image"].resolution_x = width
+    parsed["image"].resolution_y = height
+
     final_info = {
         "scene_name": parsed["scene_name"],
         "scene_rendering_type": parsed["scene_rendering_type"],
@@ -115,9 +125,7 @@ def process_image_data(image: InputImage, image_dir: Path) -> dict[str, Any]:
     return final_info
 
 
-def writer_thread(
-    d : Database, write_queue: queue.Queue, batch_size: int = 50
-) -> None:
+def writer_thread(d: Database, write_queue: queue.Queue, batch_size: int = 50) -> None:
     """Single dedicated thread — owns all DB access."""
     writer = DatabaseWriter(d)
     batch = []
@@ -145,14 +153,12 @@ def process_files(
 ):
     write_queue = queue.Queue(maxsize=500)
     total = len(importFilePaths)
-    target_output_dir : list[Path] = []
+    target_output_dir: list[Path] = []
     db = Database(db_dir)
     for f in importFilePaths:
         target_output_dir.append(db.import_dir)
 
-    writer = threading.Thread(
-        target=writer_thread, args=(db, write_queue), daemon=True
-    )
+    writer = threading.Thread(target=writer_thread, args=(db, write_queue), daemon=True)
     writer.start()
 
     with tqdm(total=total, desc="Processing files", unit="file") as progress_bar:
@@ -180,11 +186,11 @@ def init_db(db_file_path: Path):
 def main(db_dir: Path, import_dir: Path):
     if not os.path.exists(import_dir):
         raise Exception("Import image directory does not exist")
-    
+
     init_db(db_dir)
     if not os.path.isdir(db_dir):
         os.makedirs(db_dir)
-        
+
     inputs = collect_input_images(import_dir)
     image_output_dir: Path = Path(os.path.join(db_dir, "images"))
     if not os.path.exists(image_output_dir):

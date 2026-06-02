@@ -16,14 +16,16 @@ class CoordinateEntity:
     lon: Longitude
 
     def get_does_exist(self, db: Database) -> bool:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cur.execute(
                 f"SELECT EXISTS(SELECT 1 FROM coordinate WHERE lat = {self.lat.value} AND lon = {self.lon.value})"
             )
             return cur.fetchone()[0]
 
     def get_record_id(self, db: Database) -> int:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd = f"SELECT id FROM coordinate WHERE lat = {self.lat.value} AND lon = {self.lon.value}"
             cur.execute(cmd)
 
@@ -43,14 +45,16 @@ class SceneEntity:
     terrain_rendering_type: str
 
     def get_does_exist(self, db: Database) -> bool:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd = f"SELECT EXISTS(SELECT 1 FROM scene WHERE name = '{self.name}' AND terrainRenderingType = '{self.terrain_rendering_type}')"
             cur.execute(cmd)
             exists: bool = cur.fetchone()[0]
             return exists
 
     def get_record_id(self, db: Database) -> Optional[int]:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd = f"""SELECT id FROM scene 
             WHERE name = '{self.name}' 
             AND terrainRenderingType = '{self.terrain_rendering_type}'
@@ -65,7 +69,8 @@ class SceneEntity:
 
     @classmethod
     def create_from_db(cls, db: Database, id: int) -> "SceneEntity":
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd: str = f"SELECT * FROM scene WHERE id = {id}"
             cur.execute(cmd)
 
@@ -94,7 +99,8 @@ class CameraEntity:
     far_clip: float
 
     def get_does_exist(self, db: Database) -> bool:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd = """
                 SELECT EXISTS (
                     SELECT 1 FROM camera
@@ -118,7 +124,8 @@ class CameraEntity:
             return bool(cur.fetchone()[0])
 
     def get_record_id(self, db: Database) -> Optional[int]:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd = """
                 SELECT id FROM camera
                 WHERE virtualPosition = ?
@@ -146,14 +153,16 @@ class FogTypeEntity:
     name: str
 
     def get_does_exist(self, db: Database) -> bool:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd: str = (
                 f"SELECT EXISTS (SELECT 1 FROM fog_type WHERE name = '{self.name}')"
             )
             return cur.execute(cmd).fetchone()[0]
 
     def get_record_id(self, db: Database) -> Optional[int]:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd: str = f"SELECT id FROM fog_type WHERE name = '{self.name}'"
             result = cur.execute(cmd).fetchone()
 
@@ -183,7 +192,8 @@ class FogEntity:
     volume_scale: Optional[VectorContainer3D] = None
 
     def get_does_exist(self, db: Database) -> bool:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd = f"""
                 SELECT EXISTS (
                 SELECT 1
@@ -246,7 +256,8 @@ class FogEntity:
             return bool(result[0])
 
     def get_record_id(self, db: Database) -> int:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd = f"""
                 SELECT id
                 FROM fog
@@ -298,7 +309,8 @@ class LightTypeEntity:
     name: str
 
     def get_does_exist(self, db: Database) -> bool:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd: str = """SELECT EXISTS (SELECT 1 FROM light_type WHERE name = ?)"""
             params = [self.name]
 
@@ -306,7 +318,8 @@ class LightTypeEntity:
             return bool(res[0])
 
     def get_record_id(self, db: Database) -> int:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd: str = """SELECT id FROM light_type WHERE name = ?"""
             params = [self.name]
 
@@ -328,7 +341,8 @@ class LightEntity:
     type_id: int
 
     def get_record_id(self, db: Database) -> int:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd: str = """SELECT id FROM light WHERE 
                 ambient = ? AND
                 diffuse = ?  AND 
@@ -354,7 +368,8 @@ class LightEntity:
             return int(result[0])
 
     def get_does_exist(self, db: Database) -> bool:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd: str = """SELECT EXISTS (SELECT 1 FROM light WHERE
                 ambient = ? AND
                 diffuse = ?  AND 
@@ -387,7 +402,8 @@ class EnvironmentEntity:
     fog_id: int
 
     def get_does_exist(self, db: Database) -> bool:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd: str = f"""SELECT EXISTS (
                 SELECT 1 FROM environment
                 WHERE fogID = {self.fog_id}
@@ -397,7 +413,8 @@ class EnvironmentEntity:
             return bool(result[0])
 
     def get_record_id(self, db: Database) -> int:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd: str = f"""
                 SELECT id FROM environment
                 WHERE fogID = {self.fog_id}"""
@@ -421,15 +438,20 @@ class ImageEntity:
     camera_id: int
     scene_id: int
     environment_id: int
+    resolution_x: int
+    resolution_y: int
 
     def get_does_exist(self, db: Database) -> bool:
-        with closing(db.get_connection().cursor()) as cur:
+        with db as con:
+            cur = con.cursor()
             cmd: str = """SELECT EXISTS(SELECT 1 FROM image WHERE 
                     filePath = ? AND 
                     visibilityDistance = ? AND
                     cameraID = ? AND
                     sceneID = ? AND
-                    environmentID = ?
+                    environmentID = ? AND
+                    resolution_x = ? AND
+                    resolution_y = ?
                     )"""
 
             parms = (
@@ -438,6 +460,8 @@ class ImageEntity:
                 self.camera_id,
                 self.scene_id,
                 self.environment_id,
+                self.resolution_x,
+                self.resolution_y,
             )
             cur.execute(cmd, parms)
             return cur.fetchone()[0]

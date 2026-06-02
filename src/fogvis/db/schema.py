@@ -129,6 +129,8 @@ def create_image_table(cur: sqlite3.Cursor) -> None:
         visibilityDistance     REAL NOT NULL,
         cameraID               INTEGER NOT NULL REFERENCES camera(id),
         sceneID                INTEGER NOT NULL REFERENCES scene(id),
-        environmentID          INTEGER NOT NULL REFERENCES environment(id)
+        environmentID          INTEGER NOT NULL REFERENCES environment(id),
+        resolution_x           INTEGER NOT NULL, 
+        resolution_y           INTEGER NOT NULL
     )"""
     cur.execute(cmd)
