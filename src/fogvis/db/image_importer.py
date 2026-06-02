@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
@@ -158,7 +159,11 @@ class ImageImporter:
         )
 
     def read_image(
-        self, *, camera_id: int = 0, scene_id: int = 0, environment_id: int = 0
+        self,
+        *,
+        camera_id: int = 0,
+        scene_id: int = 0,
+        environment_id: int = 0,
     ) -> ImageEntity:
         return ImageEntity(
             file_path=self._data["file_name"],
@@ -166,6 +171,8 @@ class ImageImporter:
             camera_id=camera_id,
             scene_id=scene_id,
             environment_id=environment_id,
+            resolution_x=0,
+            resolution_y=0,
         )
 
     def read_all(

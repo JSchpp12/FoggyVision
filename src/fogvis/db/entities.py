@@ -438,6 +438,8 @@ class ImageEntity:
     camera_id: int
     scene_id: int
     environment_id: int
+    resolution_x: int
+    resolution_y: int
 
     def get_does_exist(self, db: Database) -> bool:
         with db as con:
@@ -447,7 +449,9 @@ class ImageEntity:
                     visibilityDistance = ? AND
                     cameraID = ? AND
                     sceneID = ? AND
-                    environmentID = ?
+                    environmentID = ? AND
+                    resolution_x = ? AND
+                    resolution_y = ?
                     )"""
 
             parms = (
@@ -456,6 +460,8 @@ class ImageEntity:
                 self.camera_id,
                 self.scene_id,
                 self.environment_id,
+                self.resolution_x,
+                self.resolution_y,
             )
             cur.execute(cmd, parms)
             return cur.fetchone()[0]

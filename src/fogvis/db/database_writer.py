@@ -244,8 +244,8 @@ class DatabaseWriter:
             cur = con.cursor()
             cur.execute(
                 """
-                INSERT INTO image (filePath, visibilityDistance, cameraID, sceneID, environmentID)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO image (filePath, visibilityDistance, cameraID, sceneID, environmentID, resolution_x, resolution_y)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     image.file_path,
@@ -253,6 +253,8 @@ class DatabaseWriter:
                     image.camera_id,
                     image.scene_id,
                     image.environment_id,
+                    image.resolution_x, 
+                    image.resolution_y
                 ),
             )
             return cur.lastrowid

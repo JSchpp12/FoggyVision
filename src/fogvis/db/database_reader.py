@@ -6,11 +6,13 @@ from dataclasses import asdict
 from fogvis.db.entities import ImageEntity, CoordinateEntity, SceneEntity
 from fogvis.db.database import Database
 
+
 class DatabaseReader:
     """
-    Handles reading entities from the database, mirroring the logic 
+    Handles reading entities from the database, mirroring the logic
     of DatabaseWriter but for retrieval operations.
     """
+
     def __init__(self, db_path: Path) -> None:
         self.db: Database = Database(db_path)
 
@@ -28,11 +30,11 @@ class DatabaseReader:
             with self.db as conn:
                 cur = conn.cursor()
                 cur.execute(
-                    "SELECT file_path, visibility_distance, camera_id, scene_id, environment_id FROM image WHERE file_path = ?",
-                    (file_path,)
+                    "SELECT file_path, visibility_distance, camera_id, scene_id, environment_id, resolution_x, resolution_y FROM image WHERE file_path = ?",
+                    (file_path,),
                 )
                 row = cur.fetchone()
-                
+
                 if row is None:
                     return None
 
@@ -41,7 +43,9 @@ class DatabaseReader:
                     visibility_distance=row[1],
                     camera_id=row[2],
                     scene_id=row[3],
-                    environment_id=row[4]
+                    environment_id=row[4],
+                    resolution_x=row[5],
+                    resolution_y=row[6],
                 )
         except sqlite3.Error as e:
             print(f"Database error reading image by file path: {e}")
