@@ -26,7 +26,7 @@ def test_collect_input_images_finds_all_frames(tmp_path):
     _copy_sample_import_tree(import_dir)
 
     inputs = collect_input_images(import_dir)
-    assert len(inputs) == 8
+    assert len(inputs) == 6
     assert all(input.image_path.exists() for input in inputs)
     assert all(input.image_data_file_path.exists() for input in inputs)
 
@@ -45,10 +45,10 @@ def test_process_files_imports_sample_frame(tmp_path):
     images_dir = db_dir / "images"
     assert images_dir.exists()
     expected_images = [
-        "2026-06-13_17-08-31_Frame-0.png",
-        "2026-06-13_17-08-31_Frame-0_distMask.tif",
-        "2026-06-13_17-08-31_Frame-0_distNormSmlMask.tif",
-        "2026-06-13_17-08-31_Frame-0_validMask.png",
+        "2026-06-13_21-40-15_Frame-0.png",
+        "2026-06-13_21-40-15_Frame-0_distMask.tif",
+        "2026-06-13_21-40-15_Frame-0_distNormSmlMask.tif",
+        "2026-06-13_21-40-15_Frame-0_validMask.png",
     ]
     for filename in expected_images:
         assert (images_dir / filename).exists()
@@ -59,41 +59,42 @@ def test_process_files_imports_sample_frame(tmp_path):
         cur.execute("SELECT count(*) FROM scene")
         assert cur.fetchone()[0] == 1
 
-        # Camera differs across frames, so one row per unique camera angle.
+        # Camera is identical across frames, so deduplicated to one.
         cur.execute("SELECT count(*) FROM camera")
-        assert cur.fetchone()[0] == 2
+        assert cur.fetchone()[0] == 1
 
         # Fog differs across frames, so one row per frame.
         cur.execute("SELECT count(*) FROM fog")
-        assert cur.fetchone()[0] == 8
+        assert cur.fetchone()[0] == 6
 
+        # Light luminance differs across the two date directories (20 vs 50).
         cur.execute("SELECT count(*) FROM light")
-        assert cur.fetchone()[0] == 1
+        assert cur.fetchone()[0] == 2
 
         cur.execute("SELECT count(*) FROM environment")
-        assert cur.fetchone()[0] == 8
+        assert cur.fetchone()[0] == 6
 
         cur.execute("SELECT count(*) FROM image")
-        assert cur.fetchone()[0] == 8
+        assert cur.fetchone()[0] == 6
 
         cur.execute(
             "SELECT filePath, rayDistanceFilePath, rayNormalizedDistanceFilePath, rayValidityFilePath FROM image WHERE filePath = ?",
-            ("2026-06-13_17-08-31_Frame-0.png",),
+            ("2026-06-13_21-40-15_Frame-0.png",),
         )
         row = cur.fetchone()
-        assert row[0] == "2026-06-13_17-08-31_Frame-0.png"
-        assert row[1] == "2026-06-13_17-08-31_Frame-0_distMask.tif"
-        assert row[2] == "2026-06-13_17-08-31_Frame-0_distNormSmlMask.tif"
-        assert row[3] == "2026-06-13_17-08-31_Frame-0_validMask.png"
+        assert row[0] == "2026-06-13_21-40-15_Frame-0.png"
+        assert row[1] == "2026-06-13_21-40-15_Frame-0_distMask.tif"
+        assert row[2] == "2026-06-13_21-40-15_Frame-0_distNormSmlMask.tif"
+        assert row[3] == "2026-06-13_21-40-15_Frame-0_validMask.png"
 
         cur.execute(
             "SELECT excludingInvalidRaysAverage, excludingInvalidRaysRayCount, includingInvalidRaysAverage, includingInvalidRaysRayCount FROM image WHERE filePath = ?",
-            ("2026-06-13_17-08-31_Frame-0.png",),
+            ("2026-06-13_21-40-15_Frame-0.png",),
         )
         row = cur.fetchone()
-        assert row[0] == pytest.approx(34510.95169559143)
-        assert row[1] == 9439
-        assert row[2] == pytest.approx(21346.461982946395)
+        assert row[0] is None
+        assert row[1] == 0
+        assert row[2] == pytest.approx(7197.180718457964)
         assert row[3] == 921600
 
 
@@ -115,37 +116,38 @@ def test_process_files_imports_multiple_frames_and_deduplicates(tmp_path):
         cur.execute("SELECT count(*) FROM scene")
         assert cur.fetchone()[0] == 1
 
-        # Camera differs across frames, so one row per frame.
+        # Camera is identical across frames, so deduplicated to one.
         cur.execute("SELECT count(*) FROM camera")
-        assert cur.fetchone()[0] == 2
+        assert cur.fetchone()[0] == 1
 
         # Fog differs across frames, so one row per frame.
         cur.execute("SELECT count(*) FROM fog")
-        assert cur.fetchone()[0] == 8
+        assert cur.fetchone()[0] == 6
 
+        # Light luminance differs across the two date directories (20 vs 50).
         cur.execute("SELECT count(*) FROM light")
-        assert cur.fetchone()[0] == 1
+        assert cur.fetchone()[0] == 2
 
         # Each unique fog gets its own environment.
         cur.execute("SELECT count(*) FROM environment")
-        assert cur.fetchone()[0] == 8
+        assert cur.fetchone()[0] == 6
 
         cur.execute("SELECT count(*) FROM environment_light")
-        assert cur.fetchone()[0] == 8
+        assert cur.fetchone()[0] == 6
 
         # One image row per frame.
         cur.execute("SELECT count(*) FROM image")
-        assert cur.fetchone()[0] == 8
+        assert cur.fetchone()[0] == 6
 
         # Each copied color image should be recorded.
         cur.execute("SELECT filePath FROM image")
         file_paths = {row[0] for row in cur.fetchall()}
-        for i in range(4):
-            assert f"2026-06-13_17-08-31_Frame-{i}.png" in file_paths
-        for i in range(2):
-            assert f"2026-06-13_20-32-10_Frame-{i}.png" in file_paths
-        for frame_id in (12, 13):
-            assert f"2026-06-13_20-39-46_Frame-{frame_id}.png" in file_paths
+        for i in (0, 1):
+            assert f"2026-06-13_21-40-15_Frame-{i}.png" in file_paths
+        for frame_id in (8, 9):
+            assert f"2026-06-13_21-45-51_Frame-{frame_id}.png" in file_paths
+        for i in (0, 1):
+            assert f"2026-06-13_22-01-00_Frame-{i}.png" in file_paths
 
         # Verify both fog volume names are present.
         cur.execute("SELECT DISTINCT volumeName FROM fog")

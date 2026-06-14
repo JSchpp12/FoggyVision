@@ -148,7 +148,7 @@ class ImageImporter:
         including = self._data["distance_metrics"]["includingInvalidRays"]
 
         def _float(value):
-            return float(value) if value is not None else 0.0
+            return float(value) if value is not None else None
 
         def _int(value):
             return int(value) if value is not None else 0
@@ -158,10 +158,10 @@ class ImageImporter:
             excluding_invalid_rays_median=_float(excluding.get("median")),
             excluding_invalid_rays_minimum=_float(excluding.get("minimum")),
             excluding_invalid_rays_ray_count=_int(excluding.get("rayCount")),
-            including_invalid_rays_average=_float(including.get("average")),
-            including_invalid_rays_median=_float(including.get("median")),
-            including_invalid_rays_minimum=_float(including.get("minimum")),
-            including_invalid_rays_ray_count=_int(including.get("rayCount")),
+            including_invalid_rays_average=float(including["average"]),
+            including_invalid_rays_median=float(including["median"]),
+            including_invalid_rays_minimum=float(including["minimum"]),
+            including_invalid_rays_ray_count=int(including["rayCount"]),
         )
 
     def read_scene(self) -> SceneData:
@@ -204,12 +204,12 @@ class ImageImporter:
     ) -> ImageEntity:
         ray_masks = self._data.get("ray_masks", {})
         return ImageEntity(
-            file_path=self._data["file_name"],
-            ray_distance_file_path=ray_masks.get("ray_distance", ""),
-            ray_normalized_distance_file_path=ray_masks.get(
-                "ray_normalized_distance", ""
-            ),
-            ray_validity_file_path=ray_masks.get("ray_validity", ""),
+            file_path=Path(self._data["file_name"]).name,
+            ray_distance_file_path=Path(ray_masks.get("ray_distance_name", "")).name,
+            ray_normalized_distance_file_path=Path(
+                ray_masks.get("ray_normalized_distance_name", "")
+            ).name,
+            ray_validity_file_path=Path(ray_masks.get("ray_validity_name", "")).name,
             distance_metrics=self.read_distance_metrics(),
             camera_id=camera_id,
             scene_id=scene_id,

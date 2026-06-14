@@ -81,7 +81,7 @@ def copy_ray_masks(json_path: Path, db_dir: Path) -> dict[str, str]:
     ray_masks = reader._data.get("ray_masks", {})
     result: dict[str, str] = {}
 
-    for key in ("ray_distance", "ray_normalized_distance", "ray_validity"):
+    for key in ("ray_distance_name", "ray_normalized_distance_name", "ray_validity_name"):
         rel_path = ray_masks.get(key, "")
         if not rel_path:
             result[key] = ""
@@ -135,11 +135,11 @@ def process_image_data(image: InputImage, image_dir: Path) -> dict[str, Any]:
 
     width, height = Get_Image_Metadata(imported_image_path)
     parsed["image"].file_path = imported_image_path.name
-    parsed["image"].ray_distance_file_path = masks.get("ray_distance", "")
+    parsed["image"].ray_distance_file_path = masks.get("ray_distance_name", "")
     parsed["image"].ray_normalized_distance_file_path = masks.get(
-        "ray_normalized_distance", ""
+        "ray_normalized_distance_name", ""
     )
-    parsed["image"].ray_validity_file_path = masks.get("ray_validity", "")
+    parsed["image"].ray_validity_file_path = masks.get("ray_validity_name", "")
     parsed["image"].resolution_x = width
     parsed["image"].resolution_y = height
 

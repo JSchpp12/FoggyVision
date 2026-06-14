@@ -413,9 +413,9 @@ class EnvironmentLightEntity:
 
 @dataclass
 class DistanceMetricsEntity:
-    excluding_invalid_rays_average: float
-    excluding_invalid_rays_median: float
-    excluding_invalid_rays_minimum: float
+    excluding_invalid_rays_average: Optional[float]
+    excluding_invalid_rays_median: Optional[float]
+    excluding_invalid_rays_minimum: Optional[float]
     excluding_invalid_rays_ray_count: int
     including_invalid_rays_average: float
     including_invalid_rays_median: float
