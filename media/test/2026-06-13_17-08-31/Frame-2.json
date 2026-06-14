@@ -1,0 +1,116 @@
+{
+    "camera_look_dir": {
+        "x": -0.4226062595844269,
+        "y": 0.0,
+        "z": -0.906313419342041
+    },
+    "camera_position": {
+        "x": 0.0,
+        "y": 15.0,
+        "z": 0.0
+    },
+    "distance_metrics": {
+        "excludingInvalidRays": {
+            "average": 5141.471911463591,
+            "median": 4800.001953125,
+            "minimum": 3359.999267578125,
+            "rayCount": 544929
+        },
+        "includingInvalidRays": {
+            "average": 13692.965379640525,
+            "median": 6000.00439453125,
+            "minimum": 3359.999267578125,
+            "rayCount": 921600
+        }
+    },
+    "file_name": "Frame-2.png",
+    "fog_params": {
+        "expFogInfo": {
+            "density": 0.6000000238418579
+        },
+        "homogenousInfo": {
+            "maxNumSteps": 256000
+        },
+        "linearInfo": {
+            "farDist": 16000.0,
+            "nearDist": 0.009999999776482582
+        },
+        "marchedInfo": {
+            "colorTransparencyCutoff": 0.009999999776482582,
+            "defaultDensity": 0.0,
+            "densityMultiplier": 3.0,
+            "distanceTransparencyCutoff": 0.05000000074505806,
+            "lightExtinctionScale": 0.15000000596046448,
+            "lightPropertyDirG": 0.6000000238418579,
+            "sigmaAbsorption": 3.000000106112566e-05,
+            "sigmaScattering": 0.002300000051036477,
+            "stepSizeDist": 80.0,
+            "stepSizeDist_light": 100.0
+        }
+    },
+    "fog_type": "marched",
+    "fog_volume_name": "clouds",
+    "light": {
+        "ambient": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        },
+        "diffuse": {
+            "x": 0.5,
+            "y": 0.5,
+            "z": 0.5
+        },
+        "direction": {
+            "x": 0.0,
+            "y": -1.0,
+            "z": 0.0
+        },
+        "enabled": true,
+        "innerDiameter": 0.0,
+        "luminance": 50,
+        "outerDiameter": 1.0,
+        "position": {
+            "x": 0.0,
+            "y": 4.0,
+            "z": 0.0
+        },
+        "specular": {
+            "x": 0.5,
+            "y": 0.5,
+            "z": 0.5
+        },
+        "type": 1
+    },
+    "ray_masks": {
+        "ray_distance": "Frame-2_distMask.tif",
+        "ray_normalized_distance": "Frame-2_distNormSmlMask.tif",
+        "ray_validity": "Frame-2_validMask.png"
+    },
+    "terrain_name": "berthoud_pass_co",
+    "terrain_shape": {
+        "center": {
+            "x": 39.794502,
+            "y": -105.76389
+        },
+        "view_distance": 10
+    },
+    "terrain_shape_type": "real",
+    "volume_info": {
+        "position": {
+            "x": 5620.0,
+            "y": -3372.5087890625,
+            "z": -20730.0
+        },
+        "rotation": {
+            "x": 89.99993133544922,
+            "y": -0.009512897580862045,
+            "z": 179.97369384765625
+        },
+        "scale": {
+            "x": 200.9998321533203,
+            "y": 200.0,
+            "z": 200.9998321533203
+        }
+    }
+}

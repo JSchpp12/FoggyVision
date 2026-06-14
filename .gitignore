@@ -1,6 +1,3 @@
-.vscode
-data
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -38,4 +35,9 @@ htmlcov/
 .idea/
 *.swp
 
-media/*
+# Local data directories
+data/
+import/
+media_final*/
+notebooks/db/input/
+notebooks/db/working_db/

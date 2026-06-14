@@ -19,16 +19,18 @@ class CoordinateEntity:
         with db as con:
             cur = con.cursor()
             cur.execute(
-                f"SELECT EXISTS(SELECT 1 FROM coordinate WHERE lat = {self.lat.value} AND lon = {self.lon.value})"
+                "SELECT EXISTS(SELECT 1 FROM coordinate WHERE lat = ? AND lon = ?)",
+                (self.lat.value, self.lon.value),
             )
             return cur.fetchone()[0]
 
     def get_record_id(self, db: Database) -> int:
         with db as con:
             cur = con.cursor()
-            cmd = f"SELECT id FROM coordinate WHERE lat = {self.lat.value} AND lon = {self.lon.value}"
-            cur.execute(cmd)
-
+            cur.execute(
+                "SELECT id FROM coordinate WHERE lat = ? AND lon = ?",
+                (self.lat.value, self.lon.value),
+            )
             result = cur.fetchone()
             if result is None:
                 raise Exception("Failed to retreive record")
@@ -43,39 +45,37 @@ class SceneEntity:
     lower_left_id: int
     center_id: int
     terrain_rendering_type: str
+    terrain_shape_center: str = ""
 
     def get_does_exist(self, db: Database) -> bool:
         with db as con:
             cur = con.cursor()
-            cmd = f"SELECT EXISTS(SELECT 1 FROM scene WHERE name = '{self.name}' AND terrainRenderingType = '{self.terrain_rendering_type}')"
-            cur.execute(cmd)
-            exists: bool = cur.fetchone()[0]
-            return exists
+            cur.execute(
+                """SELECT EXISTS (
+                    SELECT 1 FROM scene
+                    WHERE name = ? AND terrainRenderingType = ?
+                )""",
+                (self.name, self.terrain_rendering_type),
+            )
+            return cur.fetchone()[0]
 
     def get_record_id(self, db: Database) -> Optional[int]:
         with db as con:
             cur = con.cursor()
-            cmd = f"""SELECT id FROM scene 
-            WHERE name = '{self.name}' 
-            AND terrainRenderingType = '{self.terrain_rendering_type}'
-            """
-            cur.execute(cmd)
-
+            cur.execute(
+                """SELECT id FROM scene
+                WHERE name = ? AND terrainRenderingType = ?""",
+                (self.name, self.terrain_rendering_type),
+            )
             result = cur.fetchone()
-            if result is None:
-                return None
-
-            return result[0]
+            return None if result is None else result[0]
 
     @classmethod
     def create_from_db(cls, db: Database, id: int) -> "SceneEntity":
         with db as con:
             cur = con.cursor()
-            cmd: str = f"SELECT * FROM scene WHERE id = {id}"
-            cur.execute(cmd)
-
+            cur.execute("SELECT * FROM scene WHERE id = ?", (id,))
             result = cur.fetchone()
-
             cur.close()
 
             return cls(
@@ -85,6 +85,7 @@ class SceneEntity:
                 lower_left_id=result[4],
                 center_id=result[5],
                 terrain_rendering_type=result[6],
+                terrain_shape_center=result[7] if len(result) > 7 else "",
             )
 
 
@@ -155,20 +156,18 @@ class FogTypeEntity:
     def get_does_exist(self, db: Database) -> bool:
         with db as con:
             cur = con.cursor()
-            cmd: str = (
-                f"SELECT EXISTS (SELECT 1 FROM fog_type WHERE name = '{self.name}')"
+            cur.execute(
+                "SELECT EXISTS (SELECT 1 FROM fog_type WHERE name = ?)",
+                (self.name,),
             )
-            return cur.execute(cmd).fetchone()[0]
+            return bool(cur.fetchone()[0])
 
     def get_record_id(self, db: Database) -> Optional[int]:
         with db as con:
             cur = con.cursor()
-            cmd: str = f"SELECT id FROM fog_type WHERE name = '{self.name}'"
-            result = cur.execute(cmd).fetchone()
-
-            if result is None:
-                return None
-            return result[0]
+            cur.execute("SELECT id FROM fog_type WHERE name = ?", (self.name,))
+            result = cur.fetchone()
+            return None if result is None else result[0]
 
 
 @dataclass
@@ -179,6 +178,9 @@ class FogEntity:
     linear_near_distance: float
     linear_far_distance: float
     marched_cutoff: Optional[float]
+    marched_color_transparency_cutoff: Optional[float]
+    marched_distance_transparency_cutoff: Optional[float]
+    marched_light_extinction_scale: Optional[float]
     marched_default_density: float
     marched_density_multiplier: float
     marched_lightDirG: float
@@ -191,114 +193,79 @@ class FogEntity:
     volume_rotation: Optional[VectorContainer3D] = None
     volume_scale: Optional[VectorContainer3D] = None
 
+    def _build_where(self) -> tuple[str, tuple]:
+        conditions = [
+            "sceneID = ?",
+            "typeID = ?",
+            "expFogDensity = ?",
+            "linearNearDistance = ?",
+            "linearFarDistance = ?",
+            "marchedDefaultDensity = ?",
+            "marchedDensityMultiplier = ?",
+            "marchedLightG = ?",
+            "marchedSigmaAbsorption = ?",
+            "marchedSigmaScattering = ?",
+            "marchedStepSizeDist = ?",
+            "marchedStepSizeDistLight = ?",
+        ]
+        params: list = [
+            self.scene_id,
+            self.fog_type_id,
+            self.exp_fog_density,
+            self.linear_near_distance,
+            self.linear_far_distance,
+            self.marched_default_density,
+            self.marched_density_multiplier,
+            self.marched_lightDirG,
+            self.marched_sigmaAbsorption,
+            self.marched_sigmaScattering,
+            self.marched_stepSizeDist,
+            self.marched_stepSizeDist_light,
+        ]
+
+        for value, column in (
+            (self.marched_cutoff, "marchedCutoff"),
+            (self.marched_color_transparency_cutoff, "marchedColorTransparencyCutoff"),
+            (self.marched_distance_transparency_cutoff, "marchedDistanceTransparencyCutoff"),
+            (self.marched_light_extinction_scale, "marchedLightExtinctionScale"),
+            (self.volume_name, "volumeName"),
+        ):
+            if value is None:
+                conditions.append(f"{column} IS NULL")
+            else:
+                conditions.append(f"{column} = ?")
+                params.append(value)
+
+        for vector, column in (
+            (self.volume_position, "volumePosition"),
+            (self.volume_rotation, "volumeRotation"),
+            (self.volume_scale, "volumeScale"),
+        ):
+            if vector is None:
+                conditions.append(f"{column} IS NULL")
+            else:
+                conditions.append(f"{column} = ?")
+                params.append(vector.to_json())
+
+        where = " AND ".join(conditions)
+        return where, tuple(params)
+
     def get_does_exist(self, db: Database) -> bool:
         with db as con:
             cur = con.cursor()
-            cmd = f"""
-                SELECT EXISTS (
-                SELECT 1
-                FROM fog
-                WHERE sceneID = ?
-                    AND typeID = ?
-                    AND expFogDensity = ?
-                    AND linearNearDistance = ?
-                    AND linearFarDistance = ?
-                    AND marchedDefaultDensity = ?
-                    AND marchedDensityMultiplier = ?
-                    AND marchedLightG = ?
-                    AND marchedSigmaAbsorption = ?
-                    AND marchedSigmaScattering = ?
-                    AND marchedStepSizeDist = ?
-                    AND marchedStepSizeDistLight = ?\n
-            """
-            if self.marched_cutoff is None:
-                cmd += f"AND marchedCutoff IS NULL\n"
-            else:
-                cmd += f"AND marchedCutoff = {self.marched_cutoff}\n"
-
-            if self.volume_name is None:
-                cmd += "AND volumeName IS NULL\n"
-            else:
-                cmd += f"AND volumeName = '{self.volume_name}'\n"
-
-            if self.volume_position is None:
-                cmd += "AND volumePosition IS NULL\n"
-            else:
-                cmd += f"AND volumePosition = '{self.volume_position.to_json()}'\n"
-
-            if self.volume_rotation is None:
-                cmd += "AND volumeRotation IS NULL\n"
-            else:
-                cmd += f"AND volumeRotation = '{self.volume_rotation.to_json()}'\n"
-
-            if self.volume_scale is None:
-                cmd += "AND volumeScale IS NULL\n"
-            else:
-                cmd += f"AND volumeScale = '{self.volume_scale.to_json()}'\n"
-
-            cmd += ")"
-            params = (
-                self.scene_id,
-                self.fog_type_id,
-                self.exp_fog_density,
-                self.linear_near_distance,
-                self.linear_far_distance,
-                self.marched_default_density,
-                self.marched_density_multiplier,
-                self.marched_lightDirG,
-                self.marched_sigmaAbsorption,
-                self.marched_sigmaScattering,
-                self.marched_stepSizeDist,
-                self.marched_stepSizeDist_light,
+            where, params = self._build_where()
+            cur.execute(
+                f"SELECT EXISTS (SELECT 1 FROM fog WHERE {where})",
+                params,
             )
-
-            result = cur.execute(cmd, params).fetchone()
-            return bool(result[0])
+            return bool(cur.fetchone()[0])
 
     def get_record_id(self, db: Database) -> int:
         with db as con:
             cur = con.cursor()
-            cmd = f"""
-                SELECT id
-                FROM fog
-                WHERE sceneID = ?
-                    AND typeID = ?
-                    AND expFogDensity = ?
-                    AND linearNearDistance = ?
-                    AND linearFarDistance = ?
-                    AND marchedDefaultDensity = ?
-                    AND marchedDensityMultiplier = ?
-                    AND marchedLightG = ?
-                    AND marchedSigmaAbsorption = ?
-                    AND marchedSigmaScattering = ?
-                    AND marchedStepSizeDist = ?
-                    AND marchedStepSizeDistLight = ?\n
-            """
-            if self.marched_cutoff is None:
-                cmd += f"AND marchedCutoff IS NULL\n"
-            else:
-                cmd += f"AND marchedCutoff = {self.marched_cutoff}\n"
-
-            if self.volume_name is None:
-                cmd += "AND volumeName IS NULL\n"
-            else:
-                cmd += f"AND volumeName = '{self.volume_name}'\n"
-
-            params = (
-                self.scene_id,
-                self.fog_type_id,
-                self.exp_fog_density,
-                self.linear_near_distance,
-                self.linear_far_distance,
-                self.marched_default_density,
-                self.marched_density_multiplier,
-                self.marched_lightDirG,
-                self.marched_sigmaAbsorption,
-                self.marched_sigmaScattering,
-                self.marched_stepSizeDist,
-                self.marched_stepSizeDist_light,
-            )
-            result = cur.execute(cmd, params).fetchone()
+            where, params = self._build_where()
+            cur.execute(f"SELECT id FROM fog WHERE {where}", params)
+            result = cur.fetchone()
             if result is None:
                 raise Exception("Failed to get record id")
             return result[0]
@@ -311,19 +278,17 @@ class LightTypeEntity:
     def get_does_exist(self, db: Database) -> bool:
         with db as con:
             cur = con.cursor()
-            cmd: str = """SELECT EXISTS (SELECT 1 FROM light_type WHERE name = ?)"""
-            params = [self.name]
-
-            res = cur.execute(cmd, params).fetchone()
-            return bool(res[0])
+            cur.execute(
+                "SELECT EXISTS (SELECT 1 FROM light_type WHERE name = ?)",
+                (self.name,),
+            )
+            return bool(cur.fetchone()[0])
 
     def get_record_id(self, db: Database) -> int:
         with db as con:
             cur = con.cursor()
-            cmd: str = """SELECT id FROM light_type WHERE name = ?"""
-            params = [self.name]
-
-            res = cur.execute(cmd, params).fetchone()
+            cur.execute("SELECT id FROM light_type WHERE name = ?", (self.name,))
+            res = cur.fetchone()
             return int(res[0])
 
 
@@ -340,60 +305,55 @@ class LightEntity:
     luminance: float
     type_id: int
 
+    def _params(self) -> tuple:
+        return (
+            self.ambient.to_json(),
+            self.diffuse.to_json(),
+            self.specular.to_json(),
+            self.virtualDirection.to_json(),
+            self.virtualPosition.to_json(),
+            int(self.enabled),
+            self.innerDiameter,
+            self.outerDiameter,
+            self.luminance,
+            self.type_id,
+        )
+
     def get_record_id(self, db: Database) -> int:
         with db as con:
             cur = con.cursor()
-            cmd: str = """SELECT id FROM light WHERE 
+            cmd = """SELECT id FROM light WHERE 
                 ambient = ? AND
                 diffuse = ?  AND 
                 specular = ? AND
                 virtualDirection = ? AND
                 virtualPosition = ? AND
+                enabled = ? AND
                 innerDiameter = ? AND
                 outerDiameter = ? AND
                 luminance = ? AND
                 typeID = ?"""
-            parms = (
-                self.ambient.to_json(),
-                self.diffuse.to_json(),
-                self.specular.to_json(),
-                self.virtualDirection.to_json(),
-                self.virtualPosition.to_json(),
-                self.innerDiameter,
-                self.outerDiameter,
-                self.luminance,
-                self.type_id,
-            )
-            result = cur.execute(cmd, parms).fetchone()
+            result = cur.execute(cmd, self._params()).fetchone()
+            if result is None:
+                raise Exception("Failed to get record id for light")
             return int(result[0])
 
     def get_does_exist(self, db: Database) -> bool:
         with db as con:
             cur = con.cursor()
-            cmd: str = """SELECT EXISTS (SELECT 1 FROM light WHERE
+            cmd = """SELECT EXISTS (SELECT 1 FROM light WHERE
                 ambient = ? AND
                 diffuse = ?  AND 
                 specular = ? AND
                 virtualDirection = ? AND
                 virtualPosition = ? AND
+                enabled = ? AND
                 innerDiameter = ? AND
                 outerDiameter = ? AND
                 luminance = ? AND
                 typeID = ?
                 )"""
-
-            parms = (
-                self.ambient.to_json(),
-                self.diffuse.to_json(),
-                self.specular.to_json(),
-                self.virtualDirection.to_json(),
-                self.virtualPosition.to_json(),
-                self.innerDiameter,
-                self.outerDiameter,
-                self.luminance,
-                self.type_id,
-            )
-            result = cur.execute(cmd, parms).fetchone()
+            result = cur.execute(cmd, self._params()).fetchone()
             return bool(result[0])
 
 
@@ -404,22 +364,17 @@ class EnvironmentEntity:
     def get_does_exist(self, db: Database) -> bool:
         with db as con:
             cur = con.cursor()
-            cmd: str = f"""SELECT EXISTS (
-                SELECT 1 FROM environment
-                WHERE fogID = {self.fog_id}
-            )"""
-
-            result = cur.execute(cmd).fetchone()
-            return bool(result[0])
+            cur.execute(
+                "SELECT EXISTS (SELECT 1 FROM environment WHERE fogID = ?)",
+                (self.fog_id,),
+            )
+            return bool(cur.fetchone()[0])
 
     def get_record_id(self, db: Database) -> int:
         with db as con:
             cur = con.cursor()
-            cmd: str = f"""
-                SELECT id FROM environment
-                WHERE fogID = {self.fog_id}"""
-
-            result = cur.execute(cmd).fetchone()
+            cur.execute("SELECT id FROM environment WHERE fogID = ?", (self.fog_id,))
+            result = cur.fetchone()
             if result is None:
                 raise Exception("Failed to get record id for environment")
             return result[0]
@@ -430,38 +385,97 @@ class EnvironmentLightEntity:
     light_id: int
     environment_id: int
 
+    def get_does_exist(self, db: Database) -> bool:
+        with db as con:
+            cur = con.cursor()
+            cur.execute(
+                """SELECT EXISTS (
+                    SELECT 1 FROM environment_light
+                    WHERE lightID = ? AND environmentID = ?
+                )""",
+                (self.light_id, self.environment_id),
+            )
+            return bool(cur.fetchone()[0])
+
+    def get_record_id(self, db: Database) -> int:
+        with db as con:
+            cur = con.cursor()
+            cur.execute(
+                """SELECT rowid FROM environment_light
+                WHERE lightID = ? AND environmentID = ?""",
+                (self.light_id, self.environment_id),
+            )
+            result = cur.fetchone()
+            if result is None:
+                raise Exception("Failed to get record id for environment_light")
+            return result[0]
+
+
+@dataclass
+class DistanceMetricsEntity:
+    excluding_invalid_rays_average: float
+    excluding_invalid_rays_median: float
+    excluding_invalid_rays_minimum: float
+    excluding_invalid_rays_ray_count: int
+    including_invalid_rays_average: float
+    including_invalid_rays_median: float
+    including_invalid_rays_minimum: float
+    including_invalid_rays_ray_count: int
+
 
 @dataclass
 class ImageEntity:
     file_path: str
-    visibility_distance: str
+    ray_distance_file_path: str
+    ray_normalized_distance_file_path: str
+    ray_validity_file_path: str
+    distance_metrics: DistanceMetricsEntity
     camera_id: int
     scene_id: int
     environment_id: int
     resolution_x: int
     resolution_y: int
 
+    def _params(self) -> tuple:
+        return (
+            self.file_path,
+            self.ray_distance_file_path,
+            self.ray_normalized_distance_file_path,
+            self.ray_validity_file_path,
+            self.distance_metrics.excluding_invalid_rays_average,
+            self.distance_metrics.excluding_invalid_rays_median,
+            self.distance_metrics.excluding_invalid_rays_minimum,
+            self.distance_metrics.excluding_invalid_rays_ray_count,
+            self.distance_metrics.including_invalid_rays_average,
+            self.distance_metrics.including_invalid_rays_median,
+            self.distance_metrics.including_invalid_rays_minimum,
+            self.distance_metrics.including_invalid_rays_ray_count,
+            self.camera_id,
+            self.scene_id,
+            self.environment_id,
+            self.resolution_x,
+            self.resolution_y,
+        )
+
     def get_does_exist(self, db: Database) -> bool:
         with db as con:
             cur = con.cursor()
-            cmd: str = """SELECT EXISTS(SELECT 1 FROM image WHERE 
+            cur.execute(
+                """SELECT EXISTS(SELECT 1 FROM image WHERE 
                     filePath = ? AND 
-                    visibilityDistance = ? AND
                     cameraID = ? AND
                     sceneID = ? AND
                     environmentID = ? AND
                     resolution_x = ? AND
                     resolution_y = ?
-                    )"""
-
-            parms = (
-                self.file_path,
-                self.visibility_distance,
-                self.camera_id,
-                self.scene_id,
-                self.environment_id,
-                self.resolution_x,
-                self.resolution_y,
+                    )""",
+                (
+                    self.file_path,
+                    self.camera_id,
+                    self.scene_id,
+                    self.environment_id,
+                    self.resolution_x,
+                    self.resolution_y,
+                ),
             )
-            cur.execute(cmd, parms)
             return cur.fetchone()[0]

@@ -21,6 +21,7 @@ def create_scene_table(cur: sqlite3.Cursor) -> None:
         lowerLeftPositionID         INTEGER NOT NULL REFERENCES coordinate(id),
         centerPositionID            INTEGER NOT NULL REFERENCES coordinate(id),
         terrainRenderingType        TEXT NOT NULL,
+        terrainShapeCenter          TEXT,
         UNIQUE(name, terrainRenderingType)
     )
     """
@@ -60,6 +61,9 @@ def create_fog_table(cur: sqlite3.Cursor) -> None:
         linearNearDistance          REAL,
         linearFarDistance           REAL,
         marchedCutoff               REAL,
+        marchedColorTransparencyCutoff REAL,
+        marchedDistanceTransparencyCutoff REAL,
+        marchedLightExtinctionScale REAL,
         marchedDefaultDensity       REAL,
         marchedDensityMultiplier    REAL,
         marchedLightG               REAL,
@@ -126,11 +130,21 @@ def create_image_table(cur: sqlite3.Cursor) -> None:
     CREATE TABLE IF NOT EXISTS image(
         id                     INTEGER PRIMARY KEY AUTOINCREMENT,
         filePath               TEXT NOT NULL UNIQUE,
-        visibilityDistance     REAL NOT NULL,
+        rayDistanceFilePath    TEXT,
+        rayNormalizedDistanceFilePath TEXT,
+        rayValidityFilePath    TEXT,
+        excludingInvalidRaysAverage REAL NOT NULL,
+        excludingInvalidRaysMedian  REAL NOT NULL,
+        excludingInvalidRaysMinimum REAL NOT NULL,
+        excludingInvalidRaysRayCount INTEGER NOT NULL,
+        includingInvalidRaysAverage REAL NOT NULL,
+        includingInvalidRaysMedian  REAL NOT NULL,
+        includingInvalidRaysMinimum REAL NOT NULL,
+        includingInvalidRaysRayCount INTEGER NOT NULL,
         cameraID               INTEGER NOT NULL REFERENCES camera(id),
         sceneID                INTEGER NOT NULL REFERENCES scene(id),
         environmentID          INTEGER NOT NULL REFERENCES environment(id),
-        resolution_x           INTEGER NOT NULL, 
+        resolution_x           INTEGER NOT NULL,
         resolution_y           INTEGER NOT NULL
     )"""
     cur.execute(cmd)
