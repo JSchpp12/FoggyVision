@@ -15,6 +15,7 @@ from .entities import (
     EnvironmentEntity,
     EnvironmentLightEntity,
     SceneEntity,
+    DistanceMetricsEntity,
 )
 
 
@@ -54,19 +55,14 @@ class ImageImporter:
 
     def read_fog(self, *, fog_type_id: int = 0, scene_id: int = 0) -> FogEntity:
         fp = self._data["fog_params"]
+        vi = self._data.get("volume_info", {})
+
         marched_cutoff: Optional[float] = None
         if (
             "cutoffValue" in fp["marchedInfo"]
             and fp["marchedInfo"]["cutoffValue"] is not None
         ):
             marched_cutoff = float(fp["marchedInfo"]["cutoffValue"])
-
-        name = None
-        if (
-            "fog_volume_name" in self._data
-            and self._data["fog_volume_name"] is not None
-        ):
-            name = self._data["fog_volume_name"]
 
         return FogEntity(
             scene_id=scene_id,
@@ -78,6 +74,15 @@ class ImageImporter:
             linear_far_distance=float(fp["linearInfo"]["farDist"]),
             # ray-marched
             marched_cutoff=marched_cutoff,
+            marched_color_transparency_cutoff=float(
+                fp["marchedInfo"].get("colorTransparencyCutoff", 0.0)
+            ),
+            marched_distance_transparency_cutoff=float(
+                fp["marchedInfo"].get("distanceTransparencyCutoff", 0.0)
+            ),
+            marched_light_extinction_scale=float(
+                fp["marchedInfo"].get("lightExtinctionScale", 0.0)
+            ),
             marched_default_density=float(fp["marchedInfo"]["defaultDensity"]),
             marched_density_multiplier=float(fp["marchedInfo"]["densityMultiplier"]),
             marched_lightDirG=float(fp["marchedInfo"]["lightPropertyDirG"]),
@@ -85,7 +90,16 @@ class ImageImporter:
             marched_sigmaScattering=float(fp["marchedInfo"]["sigmaScattering"]),
             marched_stepSizeDist=float(fp["marchedInfo"]["stepSizeDist"]),
             marched_stepSizeDist_light=float(fp["marchedInfo"]["stepSizeDist_light"]),
-            volume_name=name,
+            volume_name=self._data.get("fog_volume_name"),
+            volume_position=VectorContainer3D(**vi.get("position", {}))
+            if "position" in vi
+            else None,
+            volume_rotation=VectorContainer3D(**vi.get("rotation", {}))
+            if "rotation" in vi
+            else None,
+            volume_scale=VectorContainer3D(**vi.get("scale", {}))
+            if "scale" in vi
+            else None,
         )
 
     def read_environment(self, *, fog_id: int = 0) -> EnvironmentEntity:
@@ -129,6 +143,27 @@ class ImageImporter:
 
         return None
 
+    def read_distance_metrics(self) -> DistanceMetricsEntity:
+        excluding = self._data["distance_metrics"]["excludingInvalidRays"]
+        including = self._data["distance_metrics"]["includingInvalidRays"]
+
+        def _float(value):
+            return float(value) if value is not None else None
+
+        def _int(value):
+            return int(value) if value is not None else 0
+
+        return DistanceMetricsEntity(
+            excluding_invalid_rays_average=_float(excluding.get("average")),
+            excluding_invalid_rays_median=_float(excluding.get("median")),
+            excluding_invalid_rays_minimum=_float(excluding.get("minimum")),
+            excluding_invalid_rays_ray_count=_int(excluding.get("rayCount")),
+            including_invalid_rays_average=float(including["average"]),
+            including_invalid_rays_median=float(including["median"]),
+            including_invalid_rays_minimum=float(including["minimum"]),
+            including_invalid_rays_ray_count=int(including["rayCount"]),
+        )
+
     def read_scene(self) -> SceneData:
         center_str: str = json.dumps(self._data["terrain_shape"]["center"])
         return SceneData(
@@ -164,15 +199,23 @@ class ImageImporter:
         camera_id: int = 0,
         scene_id: int = 0,
         environment_id: int = 0,
+        resolution_x: int = 0,
+        resolution_y: int = 0,
     ) -> ImageEntity:
+        ray_masks = self._data.get("ray_masks", {})
         return ImageEntity(
-            file_path=self._data["file_name"],
-            visibility_distance=self._data["visibility_distance"],
+            file_path=Path(self._data["file_name"]).name,
+            ray_distance_file_path=Path(ray_masks.get("ray_distance_name", "")).name,
+            ray_normalized_distance_file_path=Path(
+                ray_masks.get("ray_normalized_distance_name", "")
+            ).name,
+            ray_validity_file_path=Path(ray_masks.get("ray_validity_name", "")).name,
+            distance_metrics=self.read_distance_metrics(),
             camera_id=camera_id,
             scene_id=scene_id,
             environment_id=environment_id,
-            resolution_x=0,
-            resolution_y=0,
+            resolution_x=resolution_x,
+            resolution_y=resolution_y,
         )
 
     def read_all(

@@ -3,7 +3,6 @@ from fogvis.db import (
     ImageImporter,
     SceneEntity,
     CoordinateEntity,
-    ImageEntity,
     Database,
 )
 from fogvis.common import Latitude, Longitude
@@ -32,18 +31,12 @@ class InputImage:
 
 def collect_input_images(root_dir: str) -> list:
     """
-    Recurse through a directory and its children, collecting all .png files
-    and their partner .json files into InputImage dataclasses.
+    Recurse through a directory and its children, collecting all .json files
+    and their partner images into InputImage dataclasses.
 
-    Args:
-        root_dir: The root directory to search from.
-
-    Returns:
-        A list of InputImage instances for every .png/.json pair found.
-
-    Raises:
-        FileNotFoundError: If root_dir does not exist.
-        ValueError: If a .png file has no partner .json file.
+    JSON files are the primary source of truth and may sit next to their
+    images inside date-stamped subdirectories. Image paths are resolved
+    relative to each JSON file using the file_name and ray_masks fields.
     """
     root = Path(root_dir)
     if not root.exists():
@@ -51,12 +44,18 @@ def collect_input_images(root_dir: str) -> list:
 
     input_images = []
 
-    for png_path in sorted(root.rglob("*.png")):
-        json_path = png_path.with_suffix(".json")
-        if not json_path.exists():
-            raise ValueError(f"Missing partner .json for: {png_path}")
+    for json_path in sorted(root.rglob("*.json")):
+        reader = ImageImporter(json_path)
+        color_rel = reader._data.get("file_name", "")
+        if not color_rel:
+            raise ValueError(f"JSON file missing file_name: {json_path}")
+
+        color_path = (json_path.parent / color_rel).resolve()
+        if not color_path.exists():
+            raise ValueError(f"Missing partner image for: {json_path}")
+
         input_images.append(
-            InputImage(image_path=png_path, image_data_file_path=json_path)
+            InputImage(image_path=color_path, image_data_file_path=json_path)
         )
 
     return input_images
@@ -64,12 +63,41 @@ def collect_input_images(root_dir: str) -> list:
 
 def move_image_into_db_dir(image_path: Path, db_dir: Path) -> Path:
     # going to assume for now that the image always has a parent dir with a date
-    image_name: str = os.path.basename(image_path)
-    parent_dir: str = os.path.split(image_path.parent.resolve())[-1]
+    image_name: str = image_path.name
+    parent_dir: str = image_path.parent.name
     new_image_name = f"{parent_dir}_{image_name}"
-    new_image_path: Path = Path(os.path.join(db_dir, new_image_name))
+    new_image_path: Path = db_dir / "images" / new_image_name
+    new_image_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(image_path, new_image_path)
     return new_image_path
+
+
+def copy_ray_masks(json_path: Path, db_dir: Path) -> dict[str, str]:
+    """Copy the ray mask files referenced by a JSON file into the db images dir.
+
+    Returns a mapping of mask type to the new file name.
+    """
+    reader = ImageImporter(json_path)
+    ray_masks = reader._data.get("ray_masks", {})
+    result: dict[str, str] = {}
+
+    for key in ("ray_distance_name", "ray_normalized_distance_name", "ray_validity_name"):
+        rel_path = ray_masks.get(key, "")
+        if not rel_path:
+            result[key] = ""
+            continue
+
+        source = (json_path.parent / rel_path).resolve()
+        if not source.exists():
+            result[key] = ""
+            continue
+
+        dest_name = f"{source.parent.name}_{source.name}"
+        dest = db_dir / "images" / dest_name
+        shutil.copy2(source, dest)
+        result[key] = dest_name
+
+    return result
 
 
 def parse_image_data_file(filepath: Path) -> dict[str, Any]:
@@ -84,6 +112,7 @@ def parse_image_data_file(filepath: Path) -> dict[str, Any]:
             lon=Longitude(str(scene_data.center.y)),
         ),
         "scene_vis_range": scene_data.vis_range,
+        "terrain_shape_center": scene_data.center.to_json(),
         "camera": reader.read_camera(),
         "fog": reader.read_fog(),
         "fog_type": reader.read_fog_type(),
@@ -102,9 +131,15 @@ def Get_Image_Metadata(img_path):
 def process_image_data(image: InputImage, image_dir: Path) -> dict[str, Any]:
     imported_image_path: Path = move_image_into_db_dir(image.image_path, image_dir)
     parsed = parse_image_data_file(image.image_data_file_path)
+    masks = copy_ray_masks(image.image_data_file_path, image_dir)
 
     width, height = Get_Image_Metadata(imported_image_path)
-    parsed["image"].file_path = os.path.basename(imported_image_path)
+    parsed["image"].file_path = imported_image_path.name
+    parsed["image"].ray_distance_file_path = masks.get("ray_distance_name", "")
+    parsed["image"].ray_normalized_distance_file_path = masks.get(
+        "ray_normalized_distance_name", ""
+    )
+    parsed["image"].ray_validity_file_path = masks.get("ray_validity_name", "")
     parsed["image"].resolution_x = width
     parsed["image"].resolution_y = height
 
@@ -113,6 +148,7 @@ def process_image_data(image: InputImage, image_dir: Path) -> dict[str, Any]:
         "scene_rendering_type": parsed["scene_rendering_type"],
         "scene_center": parsed["scene_center"],
         "scene_vis_range": parsed["scene_vis_range"],
+        "terrain_shape_center": parsed["terrain_shape_center"],
         "camera": parsed["camera"],
         "fog": parsed["fog"],
         "fog_type": parsed["fog_type"],
@@ -155,8 +191,9 @@ def process_files(
     total = len(importFilePaths)
     target_output_dir: list[Path] = []
     db = Database(db_dir)
+    db.init_tables()
     for f in importFilePaths:
-        target_output_dir.append(db.import_dir)
+        target_output_dir.append(Path(db.import_dir).parent)
 
     writer = threading.Thread(target=writer_thread, args=(db, write_queue), daemon=True)
     writer.start()
@@ -187,12 +224,11 @@ def main(db_dir: Path, import_dir: Path):
     if not os.path.exists(import_dir):
         raise Exception("Import image directory does not exist")
 
-    init_db(db_dir)
-    if not os.path.isdir(db_dir):
-        os.makedirs(db_dir)
+    db = Database(db_dir)
+    db.init_tables()
 
     inputs = collect_input_images(import_dir)
-    image_output_dir: Path = Path(os.path.join(db_dir, "images"))
+    image_output_dir: Path = db.import_dir
     if not os.path.exists(image_output_dir):
         os.makedirs(image_output_dir)
 

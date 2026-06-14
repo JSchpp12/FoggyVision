@@ -34,26 +34,32 @@ class Database:
     def __init__(self, db_path: os.PathLike) -> None:
         self.db_path: os.PathLike = self.Prep_DB_Path(db_path)
         self.import_dir: Path = Path(os.path.join(Path(self.db_path).parent), "images")
-        self.conn: Optional[sqlite3.Connection] = None
+        self._conn: Optional[sqlite3.Connection] = None
+        self._depth: int = 0
 
     def __enter__(self) -> sqlite3.Connection:
-        return self.get_connection()
+        if self._conn is None:
+            self._conn = sqlite3.connect(self.db_path)
+            self._conn.execute("PRAGMA foreign_keys = ON")
+        self._depth += 1
+        return self._conn
 
     def __exit__(self, exc_type, exc, tb):
-        self.close_connection()
+        self._depth -= 1
+        if self._depth == 0 and self._conn is not None:
+            if exc_type is None:
+                self._conn.commit()
+            self._conn.close()
+            self._conn = None
 
     def close_connection(self):
-        con = self.get_connection()
-        con.commit()
-        con.close()
-        self.conn = None
+        with self:
+            pass
 
-    def get_connection(self):
-        if self.conn is None:
-            self.conn = sqlite3.connect(self.db_path)
-            self.conn.execute("PRAGMA foreign_keys = ON")
-
-        return self.conn
+    def get_connection(self) -> sqlite3.Connection:
+        if self._conn is None:
+            raise RuntimeError("No active database connection")
+        return self._conn
 
     def init_tables(self) -> None:
         with self as conn:

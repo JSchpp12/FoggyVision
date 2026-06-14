@@ -13,8 +13,8 @@ def main():
     importer_parser = subparsers.add_parser(
         "import", help="Import images into database"
     )
-    importer_parser.add_argument("--database")
-    importer_parser.add_argument("--images")
+    importer_parser.add_argument("--database", required=True)
+    importer_parser.add_argument("--images", required=True)
 
     args = parser.parse_args()
     image_dir: Path = Path(args.images)
