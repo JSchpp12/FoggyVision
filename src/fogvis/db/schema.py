@@ -128,23 +128,51 @@ def create_environment_light_table(cur: sqlite3.Cursor) -> None:
 def create_image_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS image(
-        id                     INTEGER PRIMARY KEY AUTOINCREMENT,
-        filePath               TEXT NOT NULL UNIQUE,
-        rayDistanceFilePath    TEXT,
-        rayNormalizedDistanceFilePath TEXT,
-        rayValidityFilePath    TEXT,
-        excludingInvalidRaysAverage REAL,
-        excludingInvalidRaysMedian  REAL,
-        excludingInvalidRaysMinimum REAL,
-        excludingInvalidRaysRayCount INTEGER NOT NULL,
-        includingInvalidRaysAverage REAL NOT NULL,
-        includingInvalidRaysMedian  REAL NOT NULL,
-        includingInvalidRaysMinimum REAL NOT NULL,
-        includingInvalidRaysRayCount INTEGER NOT NULL,
-        cameraID               INTEGER NOT NULL REFERENCES camera(id),
-        sceneID                INTEGER NOT NULL REFERENCES scene(id),
-        environmentID          INTEGER NOT NULL REFERENCES environment(id),
-        resolution_x           INTEGER NOT NULL,
-        resolution_y           INTEGER NOT NULL
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        fileName    TEXT NOT NULL,
+        filePath    TEXT NOT NULL UNIQUE,
+        fileType    TEXT NOT NULL,
+        width       INTEGER,
+        height      INTEGER,
+        checksum    TEXT
+    )"""
+    cur.execute(cmd)
+
+
+def create_view_table(cur: sqlite3.Cursor) -> None:
+    cmd = """
+    CREATE TABLE IF NOT EXISTS view(
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        colorImageID   INTEGER NOT NULL REFERENCES image(id),
+        cameraID       INTEGER NOT NULL REFERENCES camera(id),
+        sceneID        INTEGER NOT NULL REFERENCES scene(id),
+        environmentID  INTEGER NOT NULL REFERENCES environment(id)
+    )"""
+    cur.execute(cmd)
+
+
+def create_view_image_table(cur: sqlite3.Cursor) -> None:
+    cmd = """
+    CREATE TABLE IF NOT EXISTS view_image(
+        viewID  INTEGER NOT NULL REFERENCES view(id),
+        imageID INTEGER NOT NULL REFERENCES image(id),
+        role    TEXT NOT NULL,
+        PRIMARY KEY (viewID, role)
+    )"""
+    cur.execute(cmd)
+
+
+def create_visibility_distance_table(cur: sqlite3.Cursor) -> None:
+    cmd = """
+    CREATE TABLE IF NOT EXISTS visibility_distance(
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        viewID        INTEGER NOT NULL REFERENCES view(id),
+        distanceType  TEXT NOT NULL,
+        value         REAL,
+        average       REAL,
+        median        REAL,
+        minimum       REAL,
+        rayCount      INTEGER,
+        UNIQUE(viewID, distanceType)
     )"""
     cur.execute(cmd)

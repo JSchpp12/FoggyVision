@@ -425,57 +425,149 @@ class DistanceMetricsEntity:
 
 @dataclass
 class ImageEntity:
+    file_name: str
     file_path: str
-    ray_distance_file_path: str
-    ray_normalized_distance_file_path: str
-    ray_validity_file_path: str
-    distance_metrics: DistanceMetricsEntity
-    camera_id: int
-    scene_id: int
-    environment_id: int
-    resolution_x: int
-    resolution_y: int
+    file_type: str
+    width: Optional[int] = None
+    height: Optional[int] = None
+    checksum: Optional[str] = None
 
     def _params(self) -> tuple:
         return (
+            self.file_name,
             self.file_path,
-            self.ray_distance_file_path,
-            self.ray_normalized_distance_file_path,
-            self.ray_validity_file_path,
-            self.distance_metrics.excluding_invalid_rays_average,
-            self.distance_metrics.excluding_invalid_rays_median,
-            self.distance_metrics.excluding_invalid_rays_minimum,
-            self.distance_metrics.excluding_invalid_rays_ray_count,
-            self.distance_metrics.including_invalid_rays_average,
-            self.distance_metrics.including_invalid_rays_median,
-            self.distance_metrics.including_invalid_rays_minimum,
-            self.distance_metrics.including_invalid_rays_ray_count,
-            self.camera_id,
-            self.scene_id,
-            self.environment_id,
-            self.resolution_x,
-            self.resolution_y,
+            self.file_type,
+            self.width,
+            self.height,
+            self.checksum,
         )
 
     def get_does_exist(self, db: Database) -> bool:
         with db as con:
             cur = con.cursor()
             cur.execute(
-                """SELECT EXISTS(SELECT 1 FROM image WHERE 
-                    filePath = ? AND 
-                    cameraID = ? AND
-                    sceneID = ? AND
-                    environmentID = ? AND
-                    resolution_x = ? AND
-                    resolution_y = ?
-                    )""",
-                (
-                    self.file_path,
-                    self.camera_id,
-                    self.scene_id,
-                    self.environment_id,
-                    self.resolution_x,
-                    self.resolution_y,
-                ),
+                "SELECT EXISTS(SELECT 1 FROM image WHERE filePath = ?)",
+                (self.file_path,),
             )
             return cur.fetchone()[0]
+
+    def get_record_id(self, db: Database) -> int:
+        with db as con:
+            cur = con.cursor()
+            cur.execute("SELECT id FROM image WHERE filePath = ?", (self.file_path,))
+            result = cur.fetchone()
+            if result is None:
+                raise Exception("Failed to get record id for image")
+            return result[0]
+
+
+@dataclass
+class ViewEntity:
+    color_image_id: int
+    camera_id: int
+    scene_id: int
+    environment_id: int
+
+    def _params(self) -> tuple:
+        return (
+            self.color_image_id,
+            self.camera_id,
+            self.scene_id,
+            self.environment_id,
+        )
+
+    def get_does_exist(self, db: Database) -> bool:
+        with db as con:
+            cur = con.cursor()
+            cur.execute(
+                """SELECT EXISTS(
+                    SELECT 1 FROM view
+                    WHERE colorImageID = ? AND cameraID = ? AND sceneID = ? AND environmentID = ?
+                )""",
+                self._params(),
+            )
+            return cur.fetchone()[0]
+
+    def get_record_id(self, db: Database) -> int:
+        with db as con:
+            cur = con.cursor()
+            cur.execute(
+                """SELECT id FROM view
+                WHERE colorImageID = ? AND cameraID = ? AND sceneID = ? AND environmentID = ?""",
+                self._params(),
+            )
+            result = cur.fetchone()
+            if result is None:
+                raise Exception("Failed to get record id for view")
+            return result[0]
+
+
+@dataclass
+class ViewImageEntity:
+    view_id: int
+    image_id: int
+    role: str
+
+    def get_does_exist(self, db: Database) -> bool:
+        with db as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT EXISTS(SELECT 1 FROM view_image WHERE viewID = ? AND role = ?)",
+                (self.view_id, self.role),
+            )
+            return cur.fetchone()[0]
+
+    def get_record_id(self, db: Database) -> int:
+        with db as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT rowid FROM view_image WHERE viewID = ? AND role = ?",
+                (self.view_id, self.role),
+            )
+            result = cur.fetchone()
+            if result is None:
+                raise Exception("Failed to get record id for view_image")
+            return result[0]
+
+
+@dataclass
+class VisibilityDistanceEntity:
+    view_id: int
+    distance_type: str
+    value: Optional[float] = None
+    average: Optional[float] = None
+    median: Optional[float] = None
+    minimum: Optional[float] = None
+    ray_count: Optional[int] = None
+
+    def _params(self) -> tuple:
+        return (
+            self.view_id,
+            self.distance_type,
+            self.value,
+            self.average,
+            self.median,
+            self.minimum,
+            self.ray_count,
+        )
+
+    def get_does_exist(self, db: Database) -> bool:
+        with db as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT EXISTS(SELECT 1 FROM visibility_distance WHERE viewID = ? AND distanceType = ?)",
+                (self.view_id, self.distance_type),
+            )
+            return cur.fetchone()[0]
+
+    def get_record_id(self, db: Database) -> int:
+        with db as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT id FROM visibility_distance WHERE viewID = ? AND distanceType = ?",
+                (self.view_id, self.distance_type),
+            )
+            result = cur.fetchone()
+            if result is None:
+                raise Exception("Failed to get record id for visibility_distance")
+            return result[0]

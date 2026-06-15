@@ -15,6 +15,9 @@ from .entities import (
     EnvironmentEntity,
     EnvironmentLightEntity,
     ImageEntity,
+    ViewEntity,
+    ViewImageEntity,
+    VisibilityDistanceEntity,
 )
 
 
@@ -296,83 +299,89 @@ class DatabaseWriter:
 
     @staticmethod
     def write_image(db: Database, image: ImageEntity) -> int:
-        """Insert or replace an image record and return its row ID."""
+        """Insert an image record if it does not already exist, and return its row ID."""
         with db as con:
             cur = con.cursor()
             if image.get_does_exist(db):
-                cur.execute(
-                    """
-                    UPDATE image SET
-                        rayDistanceFilePath = ?,
-                        rayNormalizedDistanceFilePath = ?,
-                        rayValidityFilePath = ?,
-                        excludingInvalidRaysAverage = ?,
-                        excludingInvalidRaysMedian = ?,
-                        excludingInvalidRaysMinimum = ?,
-                        excludingInvalidRaysRayCount = ?,
-                        includingInvalidRaysAverage = ?,
-                        includingInvalidRaysMedian = ?,
-                        includingInvalidRaysMinimum = ?,
-                        includingInvalidRaysRayCount = ?,
-                        cameraID = ?,
-                        sceneID = ?,
-                        environmentID = ?,
-                        resolution_x = ?,
-                        resolution_y = ?
-                    WHERE filePath = ?
-                    """,
-                    (
-                        image.ray_distance_file_path,
-                        image.ray_normalized_distance_file_path,
-                        image.ray_validity_file_path,
-                        image.distance_metrics.excluding_invalid_rays_average,
-                        image.distance_metrics.excluding_invalid_rays_median,
-                        image.distance_metrics.excluding_invalid_rays_minimum,
-                        image.distance_metrics.excluding_invalid_rays_ray_count,
-                        image.distance_metrics.including_invalid_rays_average,
-                        image.distance_metrics.including_invalid_rays_median,
-                        image.distance_metrics.including_invalid_rays_minimum,
-                        image.distance_metrics.including_invalid_rays_ray_count,
-                        image.camera_id,
-                        image.scene_id,
-                        image.environment_id,
-                        image.resolution_x,
-                        image.resolution_y,
-                        image.file_path,
-                    ),
-                )
-                cur.execute("SELECT id FROM image WHERE filePath = ?", (image.file_path,))
-                result = cur.fetchone()
-                if result is None:
-                    raise Exception("Failed to retrieve updated image row ID")
-                return result[0]
+                return image.get_record_id(db)
 
             cur.execute(
                 """
-                INSERT INTO image (
-                    filePath,
-                    rayDistanceFilePath,
-                    rayNormalizedDistanceFilePath,
-                    rayValidityFilePath,
-                    excludingInvalidRaysAverage,
-                    excludingInvalidRaysMedian,
-                    excludingInvalidRaysMinimum,
-                    excludingInvalidRaysRayCount,
-                    includingInvalidRaysAverage,
-                    includingInvalidRaysMedian,
-                    includingInvalidRaysMinimum,
-                    includingInvalidRaysRayCount,
-                    cameraID,
-                    sceneID,
-                    environmentID,
-                    resolution_x,
-                    resolution_y
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO image (fileName, filePath, fileType, width, height, checksum)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 image._params(),
             )
             if cur.lastrowid is None:
                 raise Exception("Failed to retrieve newly inserted image row ID")
+            return cur.lastrowid
+
+    @staticmethod
+    def write_view(db: Database, view: ViewEntity) -> int:
+        """Insert a view record if it does not already exist, and return its row ID."""
+        with db as con:
+            cur = con.cursor()
+            if view.get_does_exist(db):
+                return view.get_record_id(db)
+
+            cur.execute(
+                """
+                INSERT INTO view (colorImageID, cameraID, sceneID, environmentID)
+                VALUES (?, ?, ?, ?)
+                """,
+                view._params(),
+            )
+            if cur.lastrowid is None:
+                raise Exception("Failed to retrieve newly inserted view row ID")
+            return cur.lastrowid
+
+    @staticmethod
+    def write_view_image(db: Database, view_image: ViewImageEntity) -> int:
+        """Insert a view_image record if it does not already exist, and return its row ID."""
+        with db as con:
+            cur = con.cursor()
+            if view_image.get_does_exist(db):
+                return view_image.get_record_id(db)
+
+            cur.execute(
+                """
+                INSERT INTO view_image (viewID, imageID, role)
+                VALUES (?, ?, ?)
+                """,
+                (view_image.view_id, view_image.image_id, view_image.role),
+            )
+            if cur.lastrowid is None:
+                raise Exception("Failed to retrieve newly inserted view_image row ID")
+            return cur.lastrowid
+
+    @staticmethod
+    def write_visibility_distance(
+        db: Database, visibility_distance: VisibilityDistanceEntity
+    ) -> int:
+        """Insert a visibility_distance record if it does not already exist, and return its row ID."""
+        with db as con:
+            cur = con.cursor()
+            if visibility_distance.get_does_exist(db):
+                return visibility_distance.get_record_id(db)
+
+            cur.execute(
+                """
+                INSERT INTO visibility_distance (
+                    viewID,
+                    distanceType,
+                    value,
+                    average,
+                    median,
+                    minimum,
+                    rayCount
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                visibility_distance._params(),
+            )
+            if cur.lastrowid is None:
+                raise Exception(
+                    "Failed to retrieve newly inserted visibility_distance row ID"
+                )
             return cur.lastrowid
 
     def write_full_scene(
@@ -388,6 +397,9 @@ class DatabaseWriter:
         light_type: Optional[FogTypeEntity] = None,
         environment: Optional[EnvironmentEntity] = None,
         images: Optional[list[ImageEntity]] = None,
+        views: Optional[list[ViewEntity]] = None,
+        view_images: Optional[list[ViewImageEntity]] = None,
+        visibility_distances: Optional[list[VisibilityDistanceEntity]] = None,
         terrain_shape_center: str = "",
     ) -> dict[str, int]:
         ids: dict[str, int] = {}
@@ -480,15 +492,44 @@ class DatabaseWriter:
         if images:
             ids["images"] = []
             for image in images:
-                image.scene_id = ids["scene"]
-                image.camera_id = ids["camera"]
+                image_id = DatabaseWriter.write_image(self.db, image)
+                ids["images"].append(image_id)
+
+        if views:
+            ids["views"] = []
+            for view in views:
+                view.scene_id = ids["scene"]
+                view.camera_id = ids["camera"]
                 if "environment" in ids:
-                    image.environment_id = ids["environment"]
-                else:
-                    image.environment_id = 0
-                if not image.get_does_exist(self.db):
-                    ids["images"].append(DatabaseWriter.write_image(self.db, image))
-                else:
-                    ids["images"].append(DatabaseWriter.write_image(self.db, image))
+                    view.environment_id = ids["environment"]
+                if ids["images"]:
+                    view.color_image_id = ids["images"][0]
+                view_id = DatabaseWriter.write_view(self.db, view)
+                ids["views"].append(view_id)
+
+        if view_images:
+            ids["view_images"] = []
+            for view_image in view_images:
+                if ids["views"]:
+                    view_image.view_id = ids["views"][0]
+                if view_image.image_id == 0 and ids["images"]:
+                    # Map by role to the corresponding image id if available.
+                    role_index = {
+                        img.file_type: img_id
+                        for img_id, img in zip(ids["images"], images or [])
+                    }
+                    view_image.image_id = role_index.get(view_image.role, ids["images"][0])
+                view_image_id = DatabaseWriter.write_view_image(self.db, view_image)
+                ids["view_images"].append(view_image_id)
+
+        if visibility_distances:
+            ids["visibility_distances"] = []
+            for visibility_distance in visibility_distances:
+                if ids["views"]:
+                    visibility_distance.view_id = ids["views"][0]
+                visibility_distance_id = DatabaseWriter.write_visibility_distance(
+                    self.db, visibility_distance
+                )
+                ids["visibility_distances"].append(visibility_distance_id)
 
         return ids

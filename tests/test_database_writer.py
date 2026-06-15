@@ -16,6 +16,9 @@ from fogvis.db.entities import (
     EnvironmentEntity,
     EnvironmentLightEntity,
     ImageEntity,
+    ViewEntity,
+    ViewImageEntity,
+    VisibilityDistanceEntity,
     DistanceMetricsEntity,
 )
 
@@ -114,7 +117,33 @@ def test_write_fog_includes_volume_info(tmp_path):
     assert row[4] == pytest.approx(0.01)
 
 
-def test_write_image_includes_distance_metrics_and_paths(tmp_path):
+def test_write_image_includes_file_metadata(tmp_path):
+    db_dir = tmp_path / "test_db"
+    db = _init_db(db_dir)
+    db_path = db_dir / "database.sqlite3"
+
+    image = ImageEntity(
+        file_name="Frame-0.png",
+        file_path="images/Frame-0.png",
+        file_type="color",
+        width=1920,
+        height=1080,
+    )
+    image_id = DatabaseWriter.write_image(db, image)
+
+    with sqlite3.connect(db_path) as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM image WHERE id = ?", (image_id,))
+        row = cur.fetchone()
+
+    assert row[1] == "Frame-0.png"
+    assert row[2] == "images/Frame-0.png"
+    assert row[3] == "color"
+    assert row[4] == 1920
+    assert row[5] == 1080
+
+
+def test_write_view_links_image_camera_scene_environment(tmp_path):
     db_dir = tmp_path / "test_db"
     db = _init_db(db_dir)
     db_path = db_dir / "database.sqlite3"
@@ -165,46 +194,118 @@ def test_write_image_includes_distance_metrics_and_paths(tmp_path):
     environment_id = DatabaseWriter.write_environment(db, environment)
 
     image = ImageEntity(
+        file_name="Frame-0.png",
         file_path="images/Frame-0.png",
-        ray_distance_file_path="images/Frame-0_distMask.tif",
-        ray_normalized_distance_file_path="images/Frame-0_distNormSmlMask.tif",
-        ray_validity_file_path="images/Frame-0_validMask.png",
-        distance_metrics=DistanceMetricsEntity(
-            excluding_invalid_rays_average=1.0,
-            excluding_invalid_rays_median=2.0,
-            excluding_invalid_rays_minimum=3.0,
-            excluding_invalid_rays_ray_count=4,
-            including_invalid_rays_average=5.0,
-            including_invalid_rays_median=6.0,
-            including_invalid_rays_minimum=7.0,
-            including_invalid_rays_ray_count=8,
-        ),
+        file_type="color",
+        width=1920,
+        height=1080,
+    )
+    image_id = DatabaseWriter.write_image(db, image)
+
+    view = ViewEntity(
+        color_image_id=image_id,
         camera_id=camera_id,
         scene_id=scene_id,
         environment_id=environment_id,
-        resolution_x=1920,
-        resolution_y=1080,
     )
-
-    image_id = DatabaseWriter.write_image(db, image)
+    view_id = DatabaseWriter.write_view(db, view)
 
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM image WHERE id = ?", (image_id,))
+        cur.execute("SELECT colorImageID, cameraID, sceneID, environmentID FROM view WHERE id = ?", (view_id,))
         row = cur.fetchone()
 
-    assert row[1] == "images/Frame-0.png"
-    assert row[2] == "images/Frame-0_distMask.tif"
-    assert row[3] == "images/Frame-0_distNormSmlMask.tif"
-    assert row[4] == "images/Frame-0_validMask.png"
-    assert row[5] == pytest.approx(1.0)
-    assert row[6] == pytest.approx(2.0)
-    assert row[7] == pytest.approx(3.0)
-    assert row[8] == 4
-    assert row[9] == pytest.approx(5.0)
-    assert row[10] == pytest.approx(6.0)
-    assert row[11] == pytest.approx(7.0)
-    assert row[12] == 8
+    assert row[0] == image_id
+    assert row[1] == camera_id
+    assert row[2] == scene_id
+    assert row[3] == environment_id
+
+
+def test_write_visibility_distance(tmp_path):
+    db_dir = tmp_path / "test_db"
+    db = _init_db(db_dir)
+    db_path = db_dir / "database.sqlite3"
+
+    coord = CoordinateEntity(lat=Latitude("39.0"), lon=Longitude("-105.0"))
+    scene = SceneEntity(
+        name="test",
+        coverage_distance_miles=10,
+        upper_right_id=DatabaseWriter.write_coordinate(db, coord),
+        lower_left_id=DatabaseWriter.write_coordinate(db, coord),
+        center_id=DatabaseWriter.write_coordinate(db, coord),
+        terrain_rendering_type="real",
+    )
+    scene_id = DatabaseWriter.write_scene(db, scene)
+
+    camera = CameraEntity(
+        scene_id=scene_id,
+        virtual_position=VectorContainer3D.from_json('{"x": 0, "y": 15, "z": 0}'),
+        look_dir=VectorContainer3D.from_json('{"x": 0, "y": 0, "z": -1}'),
+        fov=60.0,
+        near_clip=0.1,
+        far_clip=1000.0,
+    )
+    camera_id = DatabaseWriter.write_camera(db, camera)
+
+    fog_type = FogTypeEntity(name="marched")
+    fog_type_id = DatabaseWriter.write_fog_type(db, fog_type)
+    fog = FogEntity(
+        scene_id=scene_id,
+        fog_type_id=fog_type_id,
+        exp_fog_density=0.6,
+        linear_near_distance=0.01,
+        linear_far_distance=16000.0,
+        marched_cutoff=None,
+        marched_color_transparency_cutoff=0.01,
+        marched_distance_transparency_cutoff=0.05,
+        marched_light_extinction_scale=0.15,
+        marched_default_density=0.0,
+        marched_density_multiplier=1.0,
+        marched_lightDirG=0.6,
+        marched_sigmaAbsorption=1e-5,
+        marched_sigmaScattering=1e-4,
+        marched_stepSizeDist=80.0,
+        marched_stepSizeDist_light=100.0,
+    )
+    fog_id = DatabaseWriter.write_fog(db, fog)
+    environment = EnvironmentEntity(fog_id=fog_id)
+    environment_id = DatabaseWriter.write_environment(db, environment)
+
+    image = ImageEntity(
+        file_name="Frame-0.png",
+        file_path="images/Frame-0.png",
+        file_type="color",
+        width=1920,
+        height=1080,
+    )
+    image_id = DatabaseWriter.write_image(db, image)
+
+    view = ViewEntity(
+        color_image_id=image_id,
+        camera_id=camera_id,
+        scene_id=scene_id,
+        environment_id=environment_id,
+    )
+    view_id = DatabaseWriter.write_view(db, view)
+
+    visibility_distance = VisibilityDistanceEntity(
+        view_id=view_id,
+        distance_type="simple",
+        value=1000.0,
+    )
+    visibility_distance_id = DatabaseWriter.write_visibility_distance(db, visibility_distance)
+
+    with sqlite3.connect(db_path) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT viewID, distanceType, value FROM visibility_distance WHERE id = ?",
+            (visibility_distance_id,),
+        )
+        row = cur.fetchone()
+
+    assert row[0] == view_id
+    assert row[1] == "simple"
+    assert row[2] == pytest.approx(1000.0)
 
 
 def test_write_scene_reuses_existing_matching_scene(tmp_path):
@@ -327,25 +428,33 @@ def test_write_full_scene_end_to_end(tmp_path):
             environment=EnvironmentEntity(fog_id=0),
             images=[
                 ImageEntity(
-                    file_path="Frame-0.png",
-                    ray_distance_file_path="Frame-0_distMask.tif",
-                    ray_normalized_distance_file_path="Frame-0_distNormSmlMask.tif",
-                    ray_validity_file_path="Frame-0_validMask.png",
-                    distance_metrics=DistanceMetricsEntity(
-                        excluding_invalid_rays_average=1.0,
-                        excluding_invalid_rays_median=2.0,
-                        excluding_invalid_rays_minimum=3.0,
-                        excluding_invalid_rays_ray_count=4,
-                        including_invalid_rays_average=5.0,
-                        including_invalid_rays_median=6.0,
-                        including_invalid_rays_minimum=7.0,
-                        including_invalid_rays_ray_count=8,
-                    ),
+                    file_name="Frame-0.png",
+                    file_path="images/Frame-0.png",
+                    file_type="color",
+                    width=1920,
+                    height=1080,
+                )
+            ],
+            views=[
+                ViewEntity(
+                    color_image_id=0,
                     camera_id=0,
                     scene_id=0,
                     environment_id=0,
-                    resolution_x=1920,
-                    resolution_y=1080,
+                )
+            ],
+            view_images=[
+                ViewImageEntity(
+                    view_id=0,
+                    image_id=0,
+                    role="ray_distance",
+                )
+            ],
+            visibility_distances=[
+                VisibilityDistanceEntity(
+                    view_id=0,
+                    distance_type="simple",
+                    value=1000.0,
                 )
             ],
             terrain_shape_center='{"x": 39.794502, "y": -105.76389}',
@@ -354,6 +463,12 @@ def test_write_full_scene_end_to_end(tmp_path):
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         cur.execute("SELECT count(*) FROM image")
+        assert cur.fetchone()[0] == 1
+        cur.execute("SELECT count(*) FROM view")
+        assert cur.fetchone()[0] == 1
+        cur.execute("SELECT count(*) FROM view_image")
+        assert cur.fetchone()[0] == 1
+        cur.execute("SELECT count(*) FROM visibility_distance")
         assert cur.fetchone()[0] == 1
         cur.execute("SELECT count(*) FROM scene")
         assert cur.fetchone()[0] == 1

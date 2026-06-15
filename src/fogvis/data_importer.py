@@ -5,6 +5,12 @@ from fogvis.db import (
     CoordinateEntity,
     Database,
 )
+from fogvis.db.entities import (
+    ImageEntity,
+    ViewEntity,
+    ViewImageEntity,
+    VisibilityDistanceEntity,
+)
 from fogvis.common import Latitude, Longitude
 from tqdm import tqdm
 from dataclasses import dataclass
@@ -46,7 +52,14 @@ def collect_input_images(root_dir: str) -> list:
 
     for json_path in sorted(root.rglob("*.json")):
         reader = ImageImporter(json_path)
-        color_rel = reader._data.get("file_name", "")
+        data = reader._data
+
+        # Support both old flat format and new image_files wrapper.
+        if "image_files" in data:
+            color_rel = data["image_files"].get("file_name", "")
+        else:
+            color_rel = data.get("file_name", "")
+
         if not color_rel:
             raise ValueError(f"JSON file missing file_name: {json_path}")
 
@@ -72,13 +85,29 @@ def move_image_into_db_dir(image_path: Path, db_dir: Path) -> Path:
     return new_image_path
 
 
+def copy_image_file(source: Path, db_dir: Path) -> Path:
+    """Copy an image file into the db images dir and return the destination path."""
+    dest_name = f"{source.parent.name}_{source.name}"
+    dest = db_dir / "images" / dest_name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, dest)
+    return dest
+
+
 def copy_ray_masks(json_path: Path, db_dir: Path) -> dict[str, str]:
     """Copy the ray mask files referenced by a JSON file into the db images dir.
 
     Returns a mapping of mask type to the new file name.
     """
     reader = ImageImporter(json_path)
-    ray_masks = reader._data.get("ray_masks", {})
+    data = reader._data
+
+    # Support both old flat format and new image_files wrapper.
+    if "image_files" in data:
+        ray_masks = data["image_files"].get("distance_mask_images", {})
+    else:
+        ray_masks = data.get("ray_masks", {})
+
     result: dict[str, str] = {}
 
     for key in ("ray_distance_name", "ray_normalized_distance_name", "ray_validity_name"):
@@ -92,10 +121,8 @@ def copy_ray_masks(json_path: Path, db_dir: Path) -> dict[str, str]:
             result[key] = ""
             continue
 
-        dest_name = f"{source.parent.name}_{source.name}"
-        dest = db_dir / "images" / dest_name
-        shutil.copy2(source, dest)
-        result[key] = dest_name
+        dest = copy_image_file(source, db_dir)
+        result[key] = dest.name
 
     return result
 
@@ -119,7 +146,6 @@ def parse_image_data_file(filepath: Path) -> dict[str, Any]:
         "light": reader.read_light(),
         "light_type": reader.read_light_type(),
         "environment": reader.read_environment(),
-        "image": reader.read_image(),
     }
 
 
@@ -134,31 +160,61 @@ def process_image_data(image: InputImage, image_dir: Path) -> dict[str, Any]:
     masks = copy_ray_masks(image.image_data_file_path, image_dir)
 
     width, height = Get_Image_Metadata(imported_image_path)
-    parsed["image"].file_path = imported_image_path.name
-    parsed["image"].ray_distance_file_path = masks.get("ray_distance_name", "")
-    parsed["image"].ray_normalized_distance_file_path = masks.get(
-        "ray_normalized_distance_name", ""
+
+    color_image = ImageEntity(
+        file_name=imported_image_path.name,
+        file_path=str(imported_image_path),
+        file_type="color",
+        width=width,
+        height=height,
     )
-    parsed["image"].ray_validity_file_path = masks.get("ray_validity_name", "")
-    parsed["image"].resolution_x = width
-    parsed["image"].resolution_y = height
 
-    final_info = {
-        "scene_name": parsed["scene_name"],
-        "scene_rendering_type": parsed["scene_rendering_type"],
-        "scene_center": parsed["scene_center"],
-        "scene_vis_range": parsed["scene_vis_range"],
-        "terrain_shape_center": parsed["terrain_shape_center"],
-        "camera": parsed["camera"],
-        "fog": parsed["fog"],
-        "fog_type": parsed["fog_type"],
-        "light": parsed["light"],
-        "light_type": parsed["light_type"],
-        "environment": parsed["environment"],
-        "images": [parsed["image"]],
-    }
+    images = [color_image]
+    images_by_role: dict[str, ImageEntity] = {}
 
-    return final_info
+    for role, key in (
+        ("ray_distance", "ray_distance_name"),
+        ("ray_normalized_distance", "ray_normalized_distance_name"),
+        ("ray_validity", "ray_validity_name"),
+    ):
+        mask_name = masks.get(key, "")
+        if mask_name:
+            mask_path = image_dir / "images" / mask_name
+            mask_width, mask_height = Get_Image_Metadata(mask_path)
+            mask_entity = ImageEntity(
+                file_name=mask_name,
+                file_path=str(mask_path),
+                file_type=role,
+                width=mask_width,
+                height=mask_height,
+            )
+            images.append(mask_entity)
+            images_by_role[role] = mask_entity
+
+    view = ViewEntity(
+        color_image_id=0,
+        camera_id=0,
+        scene_id=0,
+        environment_id=0,
+    )
+
+    view_images: list[ViewImageEntity] = []
+    for role, mask_entity in images_by_role.items():
+        view_images.append(
+            ViewImageEntity(view_id=0, image_id=0, role=role)
+        )
+
+    json_reader: ImageImporter = ImageImporter(image.image_data_file_path)
+    visibility_distances: list[VisibilityDistanceEntity] = (
+        json_reader.read_visibility_distances(view_id=0)
+    )
+
+    parsed["images"] = images
+    parsed["views"] = [view]
+    parsed["view_images"] = view_images
+    parsed["visibility_distances"] = visibility_distances
+
+    return parsed
 
 
 def writer_thread(d: Database, write_queue: queue.Queue, batch_size: int = 50) -> None:

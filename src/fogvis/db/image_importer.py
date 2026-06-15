@@ -12,6 +12,9 @@ from .entities import (
     LightTypeEntity,
     CameraEntity,
     ImageEntity,
+    ViewEntity,
+    ViewImageEntity,
+    VisibilityDistanceEntity,
     EnvironmentEntity,
     EnvironmentLightEntity,
     SceneEntity,
@@ -39,6 +42,9 @@ class FrameData:
     environment: EnvironmentEntity
     environment_light: EnvironmentLightEntity
     image: ImageEntity
+    view: ViewEntity
+    view_images: list[ViewImageEntity]
+    visibility_distances: list[VisibilityDistanceEntity]
 
 
 LIGHT_TYPE_NAMES = {0: "Point", 1: "Directional", 2: "Spot"}
@@ -144,8 +150,15 @@ class ImageImporter:
         return None
 
     def read_distance_metrics(self) -> DistanceMetricsEntity:
-        excluding = self._data["distance_metrics"]["excludingInvalidRays"]
-        including = self._data["distance_metrics"]["includingInvalidRays"]
+        distance_metrics = self._data.get("distance_metrics", {})
+
+        # Support both legacy flat format and newer ray_metrics wrapped format
+        if "ray_metrics" in distance_metrics:
+            excluding = distance_metrics["ray_metrics"]["excludingInvalidRays"]
+            including = distance_metrics["ray_metrics"]["includingInvalidRays"]
+        else:
+            excluding = distance_metrics.get("excludingInvalidRays", {})
+            including = distance_metrics.get("includingInvalidRays", {})
 
         def _float(value):
             return float(value) if value is not None else None
@@ -193,30 +206,129 @@ class ImageImporter:
             far_clip=far_clip,
         )
 
-    def read_image(
+    def read_image(self, *, file_path: str = "", file_type: str = "color") -> ImageEntity:
+        return ImageEntity(
+            file_name=Path(file_path).name,
+            file_path=file_path,
+            file_type=file_type,
+        )
+
+    def read_view(
         self,
         *,
+        color_image_id: int = 0,
         camera_id: int = 0,
         scene_id: int = 0,
         environment_id: int = 0,
-        resolution_x: int = 0,
-        resolution_y: int = 0,
-    ) -> ImageEntity:
-        ray_masks = self._data.get("ray_masks", {})
-        return ImageEntity(
-            file_path=Path(self._data["file_name"]).name,
-            ray_distance_file_path=Path(ray_masks.get("ray_distance_name", "")).name,
-            ray_normalized_distance_file_path=Path(
-                ray_masks.get("ray_normalized_distance_name", "")
-            ).name,
-            ray_validity_file_path=Path(ray_masks.get("ray_validity_name", "")).name,
-            distance_metrics=self.read_distance_metrics(),
+    ) -> ViewEntity:
+        return ViewEntity(
+            color_image_id=color_image_id,
             camera_id=camera_id,
             scene_id=scene_id,
             environment_id=environment_id,
-            resolution_x=resolution_x,
-            resolution_y=resolution_y,
         )
+
+    def read_view_images(
+        self,
+        *,
+        view_id: int = 0,
+        color_image_id: int = 0,
+        ray_distance_image_id: int = 0,
+        ray_normalized_distance_image_id: int = 0,
+        ray_validity_image_id: int = 0,
+    ) -> list[ViewImageEntity]:
+        view_images: list[ViewImageEntity] = []
+
+        view_images.append(
+            ViewImageEntity(
+                view_id=view_id, image_id=color_image_id, role="color"
+            )
+        )
+
+        if ray_distance_image_id != 0:
+            view_images.append(
+                ViewImageEntity(
+                    view_id=view_id,
+                    image_id=ray_distance_image_id,
+                    role="ray_distance",
+                )
+            )
+
+        if ray_normalized_distance_image_id != 0:
+            view_images.append(
+                ViewImageEntity(
+                    view_id=view_id,
+                    image_id=ray_normalized_distance_image_id,
+                    role="ray_normalized_distance",
+                )
+            )
+
+        if ray_validity_image_id != 0:
+            view_images.append(
+                ViewImageEntity(
+                    view_id=view_id,
+                    image_id=ray_validity_image_id,
+                    role="ray_validity",
+                )
+            )
+
+        return view_images
+
+    def read_visibility_distances(
+        self, *, view_id: int = 0
+    ) -> list[VisibilityDistanceEntity]:
+        visibility_distances: list[VisibilityDistanceEntity] = []
+        distance_metrics = self._data.get("distance_metrics", {})
+
+        if "simple_distance" in distance_metrics:
+            visibility_distances.append(
+                VisibilityDistanceEntity(
+                    view_id=view_id,
+                    distance_type="simple",
+                    value=float(distance_metrics["simple_distance"]),
+                )
+            )
+
+        # Support both old flat format and newer ray_metrics wrapper.
+        if "ray_metrics" in distance_metrics:
+            ray_metrics = distance_metrics["ray_metrics"]
+        else:
+            ray_metrics = distance_metrics
+
+        excluding = ray_metrics.get("excludingInvalidRays", {})
+        including = ray_metrics.get("includingInvalidRays", {})
+
+        def _float(value):
+            return float(value) if value is not None else None
+
+        def _int(value):
+            return int(value) if value is not None else 0
+
+        if excluding:
+            visibility_distances.append(
+                VisibilityDistanceEntity(
+                    view_id=view_id,
+                    distance_type="ray_excluding_invalid",
+                    average=_float(excluding.get("average")),
+                    median=_float(excluding.get("median")),
+                    minimum=_float(excluding.get("minimum")),
+                    ray_count=_int(excluding.get("rayCount")),
+                )
+            )
+
+        if including:
+            visibility_distances.append(
+                VisibilityDistanceEntity(
+                    view_id=view_id,
+                    distance_type="ray_including_invalid",
+                    average=float(including["average"]),
+                    median=float(including["median"]),
+                    minimum=float(including["minimum"]),
+                    ray_count=int(including["rayCount"]),
+                )
+            )
+
+        return visibility_distances
 
     def read_all(
         self,
@@ -254,11 +366,14 @@ class ImageImporter:
             light_id=light_id,
             environment_id=environment_id,
         )
-        image = self.read_image(
+        image = self.read_image()
+        view = self.read_view(
             camera_id=camera_id,
             scene_id=scene_id,
             environment_id=environment_id,
         )
+        view_images: list[ViewImageEntity] = []
+        visibility_distances: list[VisibilityDistanceEntity] = []
 
         return FrameData(
             fog_type=fog_type,
@@ -269,4 +384,7 @@ class ImageImporter:
             environment=environment,
             environment_light=environment_light,
             image=image,
+            view=view,
+            view_images=view_images,
+            visibility_distances=visibility_distances,
         )

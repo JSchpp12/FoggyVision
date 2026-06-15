@@ -69,11 +69,66 @@ def test_camera_positions_differ(sample_json_paths):
     assert len(positions) > 1
 
 
-def test_read_image_paths(sample_json_path):
+def test_read_image_entity(sample_json_path):
     reader = ImageImporter(sample_json_path)
-    image = reader.read_image()
+    image = reader.read_image(file_path="images/Frame-0.png", file_type="color")
 
-    assert image.file_path == "Frame-0.png"
-    assert image.ray_distance_file_path == "Frame-0_distMask.tif"
-    assert image.ray_normalized_distance_file_path == "Frame-0_distNormSmlMask.tif"
-    assert image.ray_validity_file_path == "Frame-0_validMask.png"
+    assert image.file_name == "Frame-0.png"
+    assert image.file_path == "images/Frame-0.png"
+    assert image.file_type == "color"
+
+
+def test_read_visibility_distances_simple(tmp_path):
+    simple_json = {
+        "distance_metrics": {
+            "simple_distance": 1234.5
+        }
+    }
+    json_path = tmp_path / "simple.json"
+    json_path.write_text(json.dumps(simple_json))
+    reader = ImageImporter(json_path)
+    distances = reader.read_visibility_distances(view_id=1)
+
+    assert len(distances) == 1
+    assert distances[0].distance_type == "simple"
+    assert distances[0].value == pytest.approx(1234.5)
+    assert distances[0].view_id == 1
+
+
+def test_read_visibility_distances_ray_metrics(tmp_path):
+    ray_json = {
+        "distance_metrics": {
+            "ray_metrics": {
+                "excludingInvalidRays": {
+                    "average": 100.0,
+                    "median": 200.0,
+                    "minimum": 50.0,
+                    "rayCount": 1000
+                },
+                "includingInvalidRays": {
+                    "average": 150.0,
+                    "median": 250.0,
+                    "minimum": 75.0,
+                    "rayCount": 2000
+                }
+            }
+        }
+    }
+    json_path = tmp_path / "ray.json"
+    json_path.write_text(json.dumps(ray_json))
+    reader = ImageImporter(json_path)
+    distances = reader.read_visibility_distances(view_id=2)
+
+    assert len(distances) == 2
+    
+    excluding = next(d for d in distances if d.distance_type == "ray_excluding_invalid")
+    assert excluding.average == pytest.approx(100.0)
+    assert excluding.median == pytest.approx(200.0)
+    assert excluding.minimum == pytest.approx(50.0)
+    assert excluding.ray_count == 1000
+    
+    including = next(d for d in distances if d.distance_type == "ray_including_invalid")
+    assert including.average == pytest.approx(150.0)
+    assert including.median == pytest.approx(250.0)
+    assert including.minimum == pytest.approx(75.0)
+    assert including.ray_count == 2000
