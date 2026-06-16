@@ -74,13 +74,25 @@ def collect_input_images(root_dir: str) -> list:
     return input_images
 
 
-def move_image_into_db_dir(image_path: Path, db_dir: Path) -> Path:
-    # going to assume for now that the image always has a parent dir with a date
-    image_name: str = image_path.name
+def move_image_into_db_dir(
+    image_path: Path,
+    db_dir: Path,
+    image_format: str = "png",
+    jpeg_quality: int = 95,
+) -> Path:
+    # Bring the color image into the db. By default the original PNG is copied
+    # as-is. If image_format == "jpg", the image is re-encoded as JPEG.
+    # Masks are handled separately via copy_image_file and are not touched.
     parent_dir: str = image_path.parent.name
-    new_image_name = f"{parent_dir}_{image_name}"
-    new_image_path: Path = db_dir / "images" / new_image_name
+    new_image_path: Path = db_dir / "images" / f"{parent_dir}_{image_path.name}"
     new_image_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if image_format == "jpg":
+        jpg_path = new_image_path.with_suffix(".jpg")
+        with Image.open(image_path) as src:
+            src.convert("RGB").save(jpg_path, format="JPEG", quality=jpeg_quality)
+        return jpg_path
+
     shutil.copy2(image_path, new_image_path)
     return new_image_path
 
@@ -110,7 +122,11 @@ def copy_ray_masks(json_path: Path, db_dir: Path) -> dict[str, str]:
 
     result: dict[str, str] = {}
 
-    for key in ("ray_distance_name", "ray_normalized_distance_name", "ray_validity_name"):
+    for key in (
+        "ray_distance_name",
+        "ray_normalized_distance_name",
+        "ray_validity_name",
+    ):
         rel_path = ray_masks.get(key, "")
         if not rel_path:
             result[key] = ""
@@ -154,8 +170,15 @@ def Get_Image_Metadata(img_path):
         return img.size
 
 
-def process_image_data(image: InputImage, image_dir: Path) -> dict[str, Any]:
-    imported_image_path: Path = move_image_into_db_dir(image.image_path, image_dir)
+def process_image_data(
+    image: InputImage,
+    image_dir: Path,
+    image_format: str = "png",
+    jpeg_quality: int = 95,
+) -> dict[str, Any]:
+    imported_image_path: Path = move_image_into_db_dir(
+        image.image_path, image_dir, image_format=image_format, jpeg_quality=jpeg_quality
+    )
     parsed = parse_image_data_file(image.image_data_file_path)
     masks = copy_ray_masks(image.image_data_file_path, image_dir)
 
@@ -198,9 +221,7 @@ def process_image_data(image: InputImage, image_dir: Path) -> dict[str, Any]:
 
     view_images: list[ViewImageEntity] = []
     for role, mask_entity in images_by_role.items():
-        view_images.append(
-            ViewImageEntity(view_id=0, image_id=0, role=role)
-        )
+        view_images.append(ViewImageEntity(view_id=0, image_id=0, role=role))
 
     json_reader: ImageImporter = ImageImporter(image.image_data_file_path)
     visibility_distances: list[VisibilityDistanceEntity] = (
@@ -240,6 +261,8 @@ def process_files(
     importFilePaths: list[InputImage],
     db_dir: Path,
     max_workers: int = 16,
+    image_format: str = "png",
+    jpeg_quality: int = 95,
 ):
     write_queue = queue.Queue(maxsize=500)
     total = len(importFilePaths)
@@ -252,11 +275,17 @@ def process_files(
     writer = threading.Thread(target=writer_thread, args=(db, write_queue), daemon=True)
     writer.start()
 
+    def _process(image: InputImage, image_dir: Path) -> dict[str, Any]:
+        return process_image_data(
+            image,
+            image_dir,
+            image_format=image_format,
+            jpeg_quality=jpeg_quality,
+        )
+
     with tqdm(total=total, desc="Processing files", unit="file") as progress_bar:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            for result in executor.map(
-                process_image_data, importFilePaths, target_output_dir
-            ):
+            for result in executor.map(_process, importFilePaths, target_output_dir):
                 write_queue.put(result)
                 progress_bar.update(1)
 
@@ -274,7 +303,12 @@ def init_db(db_file_path: Path):
     db.init_tables()
 
 
-def main(db_dir: Path, import_dir: Path):
+def main(
+    db_dir: Path,
+    import_dir: Path,
+    image_format: str = "png",
+    jpeg_quality: int = 95,
+):
     if not os.path.exists(import_dir):
         raise Exception("Import image directory does not exist")
 
@@ -286,4 +320,9 @@ def main(db_dir: Path, import_dir: Path):
     if not os.path.exists(image_output_dir):
         os.makedirs(image_output_dir)
 
-    process_files(inputs, db_dir)
+    process_files(
+        inputs,
+        db_dir,
+        image_format=image_format,
+        jpeg_quality=jpeg_quality,
+    )
