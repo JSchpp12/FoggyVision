@@ -307,8 +307,8 @@ class DatabaseWriter:
 
             cur.execute(
                 """
-                INSERT INTO image (fileName, filePath, fileType, width, height, checksum)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO image (fileName, fileType, width, height, checksum)
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 image._params(),
             )

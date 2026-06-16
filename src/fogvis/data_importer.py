@@ -163,7 +163,6 @@ def process_image_data(image: InputImage, image_dir: Path) -> dict[str, Any]:
 
     color_image = ImageEntity(
         file_name=imported_image_path.name,
-        file_path=str(imported_image_path),
         file_type="color",
         width=width,
         height=height,
@@ -183,7 +182,6 @@ def process_image_data(image: InputImage, image_dir: Path) -> dict[str, Any]:
             mask_width, mask_height = Get_Image_Metadata(mask_path)
             mask_entity = ImageEntity(
                 file_name=mask_name,
-                file_path=str(mask_path),
                 file_type=role,
                 width=mask_width,
                 height=mask_height,

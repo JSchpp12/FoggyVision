@@ -206,10 +206,9 @@ class ImageImporter:
             far_clip=far_clip,
         )
 
-    def read_image(self, *, file_path: str = "", file_type: str = "color") -> ImageEntity:
+    def read_image(self, *, file_name: str = "", file_type: str = "color") -> ImageEntity:
         return ImageEntity(
-            file_name=Path(file_path).name,
-            file_path=file_path,
+            file_name=Path(file_name).name if file_name else "",
             file_type=file_type,
         )
 

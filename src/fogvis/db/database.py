@@ -82,6 +82,6 @@ class Database:
             create_visibility_distance_table(cur)
 
             create_image_index = (
-                "CREATE INDEX IF NOT EXISTS idx_image_filepath ON image(filePath)"
+                "CREATE INDEX IF NOT EXISTS idx_image_filename ON image(fileName)"
             )
             cur.execute(create_image_index)

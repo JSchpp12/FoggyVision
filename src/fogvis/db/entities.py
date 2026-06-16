@@ -426,7 +426,6 @@ class DistanceMetricsEntity:
 @dataclass
 class ImageEntity:
     file_name: str
-    file_path: str
     file_type: str
     width: Optional[int] = None
     height: Optional[int] = None
@@ -435,26 +434,35 @@ class ImageEntity:
     def _params(self) -> tuple:
         return (
             self.file_name,
-            self.file_path,
             self.file_type,
             self.width,
             self.height,
             self.checksum,
         )
 
+    @classmethod
+    def from_row(cls, row: tuple) -> "ImageEntity":
+        return cls(
+            file_name=row[0],
+            file_type=row[1],
+            width=row[2],
+            height=row[3],
+            checksum=row[4],
+        )
+
     def get_does_exist(self, db: Database) -> bool:
         with db as con:
             cur = con.cursor()
             cur.execute(
-                "SELECT EXISTS(SELECT 1 FROM image WHERE filePath = ?)",
-                (self.file_path,),
+                "SELECT EXISTS(SELECT 1 FROM image WHERE fileName = ?)",
+                (self.file_name,),
             )
             return cur.fetchone()[0]
 
     def get_record_id(self, db: Database) -> int:
         with db as con:
             cur = con.cursor()
-            cur.execute("SELECT id FROM image WHERE filePath = ?", (self.file_path,))
+            cur.execute("SELECT id FROM image WHERE fileName = ?", (self.file_name,))
             result = cur.fetchone()
             if result is None:
                 raise Exception("Failed to get record id for image")

@@ -16,12 +16,12 @@ class DatabaseReader:
     def __init__(self, db_path: Path) -> None:
         self.db: Database = Database(db_path)
 
-    def read_image_by_file_path(self, file_path: str) -> Optional[ImageEntity]:
+    def read_image_by_file_name(self, file_name: str) -> Optional[ImageEntity]:
         """
-        Reads a single ImageEntity record based on its unique file_path.
+        Reads a single ImageEntity record based on its unique file_name.
 
         Args:
-            file_path: The unique file path of the image.
+            file_name: The unique file name of the image.
 
         Returns:
             An ImageEntity object if found, otherwise None.
@@ -30,24 +30,17 @@ class DatabaseReader:
             with self.db as conn:
                 cur = conn.cursor()
                 cur.execute(
-                    "SELECT fileName, filePath, fileType, width, height, checksum FROM image WHERE filePath = ?",
-                    (file_path,),
+                    "SELECT fileName, fileType, width, height, checksum FROM image WHERE fileName = ?",
+                    (file_name,),
                 )
                 row = cur.fetchone()
 
                 if row is None:
                     return None
 
-                return ImageEntity(
-                    file_name=row[0],
-                    file_path=row[1],
-                    file_type=row[2],
-                    width=row[3],
-                    height=row[4],
-                    checksum=row[5],
-                )
+                return ImageEntity.from_row(row)
         except sqlite3.Error as e:
-            print(f"Database error reading image by file path: {e}")
+            print(f"Database error reading image by file name: {e}")
             return None
 
     def read_view_by_id(self, view_id: int) -> Optional[ViewEntity]:

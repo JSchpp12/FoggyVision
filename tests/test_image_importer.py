@@ -71,10 +71,9 @@ def test_camera_positions_differ(sample_json_paths):
 
 def test_read_image_entity(sample_json_path):
     reader = ImageImporter(sample_json_path)
-    image = reader.read_image(file_path="images/Frame-0.png", file_type="color")
+    image = reader.read_image(file_name="images/Frame-0.png", file_type="color")
 
     assert image.file_name == "Frame-0.png"
-    assert image.file_path == "images/Frame-0.png"
     assert image.file_type == "color"
 
 

@@ -28,8 +28,8 @@ class FoggyVisionDataset(Dataset):
         A torchvision.transforms-compatible callable applied to every image
         *after* loading.
     label_transform : callable, optional
-        A callable applied to the raw ``visibilityDistance`` value so that
-        the caller can normalise / log-transform labels as desired.
+    A callable applied to the raw visibility distance value so that
+    the caller can normalise / log-transform labels as desired.
     """
 
     def __init__(
@@ -44,13 +44,20 @@ class FoggyVisionDataset(Dataset):
         self._transform = transform
         self._label_transform = label_transform or (lambda v: v)
 
-        # Build an internal lookup: (id, file_path, visibility_distance)
+        # Build an internal lookup: (id, file_name, visibility_distance)
         self._samples: list[tuple[int, str, float]] = []
         if self._db_path.exists():
             with Database(self._db_path) as conn:
                 cur = conn.cursor()
                 cur.execute(
-                    "SELECT id, filePath, visibilityDistance FROM image ORDER BY id"
+                    """
+                    SELECT i.id, i.fileName, vd.value
+                    FROM image i
+                    JOIN view_image vi ON vi.imageID = i.id
+                    JOIN visibility_distance vd ON vd.viewID = vi.viewID
+                    WHERE vi.role = 'color'
+                    ORDER BY i.id
+                    """
                 )
                 self._samples = list(cur.fetchall())
 
@@ -58,13 +65,13 @@ class FoggyVisionDataset(Dataset):
         return len(self._samples)
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, float]:
-        _id, file_path, raw_vis = self._samples[index]
+        _id, file_name, raw_vis = self._samples[index]
 
         # --- image ---------------------------------------------------------
-        image_path = self._image_root / file_path
+        image_path = self._image_root / file_name
         if not image_path.exists():
             raise FileNotFoundError(
-                f"Image not found: {image_path}  (database references '{file_path}')"
+                f"Image not found: {image_path}  (database references '{file_name}')"
             )
 
         image = Image.open(image_path).convert("RGB")
@@ -83,18 +90,18 @@ class FoggyVisionDataset(Dataset):
     def labels(self) -> torch.Tensor:
         """Return all labels as a 1-D float Tensor (convenience for plotting)."""
         return torch.tensor(
-            [self._label_transform(vis) for _id, _path, vis in self._samples],
+            [self._label_transform(vis) for _id, _name, vis in self._samples],
             dtype=torch.float,
         )
 
     @property
-    def file_paths(self) -> list[str]:
-        return [fp for _id, fp, _vis in self._samples]
+    def file_names(self) -> list[str]:
+        return [name for _id, name, _vis in self._samples]
 
     @property
     def raw_visibilities(self) -> list[float]:
         """Return the raw (non-transformed) visibility distances."""
-        return [vis for _id, _path, vis in self._samples]
+        return [vis for _id, _name, vis in self._samples]
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +136,7 @@ def get_dataloader(
     transform : callable, optional
         Image transform applied per-item.
     label_transform : callable, optional
-        Callable applied to each ``visibilityDistance`` label.
+        Callable applied to each visibility distance label.
     num_workers : int
         Workers for the DataLoader (set >0 for faster I/O).
     pin_memory : bool

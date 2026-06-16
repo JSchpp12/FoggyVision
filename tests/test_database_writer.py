@@ -124,7 +124,6 @@ def test_write_image_includes_file_metadata(tmp_path):
 
     image = ImageEntity(
         file_name="Frame-0.png",
-        file_path="images/Frame-0.png",
         file_type="color",
         width=1920,
         height=1080,
@@ -133,14 +132,13 @@ def test_write_image_includes_file_metadata(tmp_path):
 
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM image WHERE id = ?", (image_id,))
+        cur.execute("SELECT fileName, fileType, width, height FROM image WHERE id = ?", (image_id,))
         row = cur.fetchone()
 
-    assert row[1] == "Frame-0.png"
-    assert row[2] == "images/Frame-0.png"
-    assert row[3] == "color"
-    assert row[4] == 1920
-    assert row[5] == 1080
+    assert row[0] == "Frame-0.png"
+    assert row[1] == "color"
+    assert row[2] == 1920
+    assert row[3] == 1080
 
 
 def test_write_view_links_image_camera_scene_environment(tmp_path):
@@ -195,7 +193,6 @@ def test_write_view_links_image_camera_scene_environment(tmp_path):
 
     image = ImageEntity(
         file_name="Frame-0.png",
-        file_path="images/Frame-0.png",
         file_type="color",
         width=1920,
         height=1080,
@@ -273,7 +270,6 @@ def test_write_visibility_distance(tmp_path):
 
     image = ImageEntity(
         file_name="Frame-0.png",
-        file_path="images/Frame-0.png",
         file_type="color",
         width=1920,
         height=1080,
@@ -429,7 +425,6 @@ def test_write_full_scene_end_to_end(tmp_path):
             images=[
                 ImageEntity(
                     file_name="Frame-0.png",
-                    file_path="images/Frame-0.png",
                     file_type="color",
                     width=1920,
                     height=1080,
