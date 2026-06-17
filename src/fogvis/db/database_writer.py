@@ -474,14 +474,16 @@ class DatabaseWriter:
 
         if environment is not None:
             environment.fog_id = ids["fog"]
+            # Ensure the environment's light set includes the light that was just written/reused.
+            if "light" in ids:
+                environment.light_ids.add(ids["light"])
             if environment.get_does_exist(self.db):
                 env_id = environment.get_record_id(self.db)
             else:
                 env_id = DatabaseWriter.write_environment(self.db, environment)
             ids["environment"] = env_id
 
-            if "light" in ids:
-                light_id = ids["light"]
+            for light_id in environment.light_ids:
                 env_light = EnvironmentLightEntity(environment_id=env_id, light_id=light_id)
                 if not env_light.get_does_exist(self.db):
                     DatabaseWriter.write_environment_light(

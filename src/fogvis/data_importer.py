@@ -162,6 +162,7 @@ def parse_image_data_file(filepath: Path) -> dict[str, Any]:
         "light": reader.read_light(),
         "light_type": reader.read_light_type(),
         "environment": reader.read_environment(),
+        # environment.light_ids will be filled in by write_full_scene once the light id is known
     }
 
 

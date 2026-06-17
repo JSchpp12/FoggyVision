@@ -108,8 +108,9 @@ class ImageImporter:
             else None,
         )
 
-    def read_environment(self, *, fog_id: int = 0) -> EnvironmentEntity:
-        return EnvironmentEntity(fog_id=fog_id)
+    def read_environment(self, *, fog_id: int = 0, light_id: int = 0) -> EnvironmentEntity:
+        light_ids = {light_id} if light_id else set()
+        return EnvironmentEntity(fog_id=fog_id, light_ids=light_ids)
 
     def read_environment_light(
         self, *, light_id: int = 0, environment_id: int = 0
@@ -360,7 +361,7 @@ class ImageImporter:
             near_clip=near_clip,
             far_clip=far_clip,
         )
-        environment = self.read_environment(fog_id=fog_id)
+        environment = self.read_environment(fog_id=fog_id, light_id=light_id)
         environment_light = self.read_environment_light(
             light_id=light_id,
             environment_id=environment_id,

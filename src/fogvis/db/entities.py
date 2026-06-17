@@ -1,10 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from sqlite3 import Cursor
 from contextlib import closing
 
 import sqlite3
 
-from typing import Optional
+from typing import Optional, Set
 
 from fogvis.common import Latitude, Longitude, VectorContainer3D
 from .database import Database
@@ -360,24 +360,56 @@ class LightEntity:
 @dataclass
 class EnvironmentEntity:
     fog_id: int
+    light_ids: Set[int] = field(default_factory=set)
+
+    def _params(self) -> tuple:
+        return (self.fog_id,)
+
+    @staticmethod
+    def _find_environment_id(cur: Cursor, fog_id: int, light_ids: Set[int]) -> Optional[int]:
+        """Find an environment for the given fog that is linked to exactly these lights."""
+        if not light_ids:
+            cur.execute(
+                "SELECT id FROM environment WHERE fogID = ? AND id NOT IN (SELECT environmentID FROM environment_light)",
+                (fog_id,),
+            )
+            row = cur.fetchone()
+            return row[0] if row else None
+
+        placeholders = ", ".join(["?"] * len(light_ids))
+        cur.execute(
+            f"""
+            SELECT e.id
+            FROM environment e
+            WHERE e.fogID = ?
+              AND NOT EXISTS (
+                  SELECT 1 FROM environment_light el
+                  WHERE el.environmentID = e.id
+                    AND el.lightID NOT IN ({placeholders})
+              )
+              AND (
+                  SELECT COUNT(DISTINCT lightID)
+                  FROM environment_light
+                  WHERE environmentID = e.id
+              ) = ?
+            """,
+            (fog_id, *light_ids, len(light_ids)),
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
 
     def get_does_exist(self, db: Database) -> bool:
         with db as con:
             cur = con.cursor()
-            cur.execute(
-                "SELECT EXISTS (SELECT 1 FROM environment WHERE fogID = ?)",
-                (self.fog_id,),
-            )
-            return bool(cur.fetchone()[0])
+            return self._find_environment_id(cur, self.fog_id, self.light_ids) is not None
 
     def get_record_id(self, db: Database) -> int:
         with db as con:
             cur = con.cursor()
-            cur.execute("SELECT id FROM environment WHERE fogID = ?", (self.fog_id,))
-            result = cur.fetchone()
-            if result is None:
+            env_id = self._find_environment_id(cur, self.fog_id, self.light_ids)
+            if env_id is None:
                 raise Exception("Failed to get record id for environment")
-            return result[0]
+            return env_id
 
 
 @dataclass
