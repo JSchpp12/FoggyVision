@@ -1,5 +1,6 @@
 from fogvis.db import (
     DatabaseWriter,
+    DatabaseCleanup,
     ImageImporter,
     SceneEntity,
     CoordinateEntity,
@@ -19,7 +20,6 @@ import os
 import shutil
 import queue
 import threading
-import logging
 from PIL import Image
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -304,6 +304,18 @@ def init_db(db_file_path: Path):
     db.init_tables()
 
 
+def cleanup_db(db_dir: Path) -> object:
+    """Remove duplicate views and orphaned rows/files left by re-imports.
+
+    Prints a one-line summary to the console and returns the
+    DatabaseCleanup report.
+    """
+    db = Database(db_dir)
+    report = DatabaseCleanup(db).remove_duplicate_views()
+    print(report)
+    return report
+
+
 def main(
     db_dir: Path,
     import_dir: Path,
@@ -327,3 +339,5 @@ def main(
         image_format=image_format,
         jpeg_quality=jpeg_quality,
     )
+
+    cleanup_db(db_dir)

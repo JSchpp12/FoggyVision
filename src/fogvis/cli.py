@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 from .data_importer import main as import_main
+from .data_importer import cleanup_db
 
 
 def main():
@@ -28,9 +29,21 @@ def main():
         help="JPEG quality (1-100) used when --format=jpg. Default: 95.",
     )
 
+    cleanup_parser = subparsers.add_parser(
+        "cleanup",
+        help="Remove duplicate view records and orphaned files from the database",
+    )
+    cleanup_parser.add_argument("--database", required=True)
+
     args = parser.parse_args()
+
+    if args.command == "cleanup":
+        database_dir: Path = Path(args.database)
+        cleanup_db(database_dir)
+        return
+
     image_dir: Path = Path(args.images)
-    database_dir: Path = Path(args.database)
+    database_dir = Path(args.database)
     import_main(
         import_dir=image_dir,
         db_dir=database_dir,
