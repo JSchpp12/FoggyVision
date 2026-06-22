@@ -225,7 +225,10 @@ class FogEntity:
         for value, column in (
             (self.marched_cutoff, "marchedCutoff"),
             (self.marched_color_transparency_cutoff, "marchedColorTransparencyCutoff"),
-            (self.marched_distance_transparency_cutoff, "marchedDistanceTransparencyCutoff"),
+            (
+                self.marched_distance_transparency_cutoff,
+                "marchedDistanceTransparencyCutoff",
+            ),
             (self.marched_light_extinction_scale, "marchedLightExtinctionScale"),
             (self.volume_name, "volumeName"),
         ):
@@ -365,7 +368,9 @@ class EnvironmentEntity:
         return (self.fog_id,)
 
     @staticmethod
-    def _find_environment_id(cur: Cursor, fog_id: int, light_ids: Set[int]) -> Optional[int]:
+    def _find_environment_id(
+        cur: Cursor, fog_id: int, light_ids: Set[int]
+    ) -> Optional[int]:
         """Find an environment for the given fog that is linked to exactly these lights."""
         if not light_ids:
             cur.execute(
@@ -400,7 +405,9 @@ class EnvironmentEntity:
     def get_does_exist(self, db: Database) -> bool:
         with db as con:
             cur = con.cursor()
-            return self._find_environment_id(cur, self.fog_id, self.light_ids) is not None
+            return (
+                self._find_environment_id(cur, self.fog_id, self.light_ids) is not None
+            )
 
     def get_record_id(self, db: Database) -> int:
         with db as con:

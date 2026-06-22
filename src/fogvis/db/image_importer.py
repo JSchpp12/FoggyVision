@@ -97,18 +97,24 @@ class ImageImporter:
             marched_stepSizeDist=float(fp["marchedInfo"]["stepSizeDist"]),
             marched_stepSizeDist_light=float(fp["marchedInfo"]["stepSizeDist_light"]),
             volume_name=self._data.get("fog_volume_name"),
-            volume_position=VectorContainer3D(**vi.get("position", {}))
-            if "position" in vi
-            else None,
-            volume_rotation=VectorContainer3D(**vi.get("rotation", {}))
-            if "rotation" in vi
-            else None,
-            volume_scale=VectorContainer3D(**vi.get("scale", {}))
-            if "scale" in vi
-            else None,
+            volume_position=(
+                VectorContainer3D(**vi.get("position", {}))
+                if "position" in vi
+                else None
+            ),
+            volume_rotation=(
+                VectorContainer3D(**vi.get("rotation", {}))
+                if "rotation" in vi
+                else None
+            ),
+            volume_scale=(
+                VectorContainer3D(**vi.get("scale", {})) if "scale" in vi else None
+            ),
         )
 
-    def read_environment(self, *, fog_id: int = 0, light_id: int = 0) -> EnvironmentEntity:
+    def read_environment(
+        self, *, fog_id: int = 0, light_id: int = 0
+    ) -> EnvironmentEntity:
         light_ids = {light_id} if light_id else set()
         return EnvironmentEntity(fog_id=fog_id, light_ids=light_ids)
 
@@ -207,7 +213,9 @@ class ImageImporter:
             far_clip=far_clip,
         )
 
-    def read_image(self, *, file_name: str = "", file_type: str = "color") -> ImageEntity:
+    def read_image(
+        self, *, file_name: str = "", file_type: str = "color"
+    ) -> ImageEntity:
         return ImageEntity(
             file_name=Path(file_name).name if file_name else "",
             file_type=file_type,
@@ -240,9 +248,7 @@ class ImageImporter:
         view_images: list[ViewImageEntity] = []
 
         view_images.append(
-            ViewImageEntity(
-                view_id=view_id, image_id=color_image_id, role="color"
-            )
+            ViewImageEntity(view_id=view_id, image_id=color_image_id, role="color")
         )
 
         if ray_distance_image_id != 0:

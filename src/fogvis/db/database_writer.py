@@ -176,8 +176,14 @@ class DatabaseWriter:
 
             for value, column in (
                 (fog.marched_cutoff, "marchedCutoff"),
-                (fog.marched_color_transparency_cutoff, "marchedColorTransparencyCutoff"),
-                (fog.marched_distance_transparency_cutoff, "marchedDistanceTransparencyCutoff"),
+                (
+                    fog.marched_color_transparency_cutoff,
+                    "marchedColorTransparencyCutoff",
+                ),
+                (
+                    fog.marched_distance_transparency_cutoff,
+                    "marchedDistanceTransparencyCutoff",
+                ),
                 (fog.marched_light_extinction_scale, "marchedLightExtinctionScale"),
                 (fog.volume_name, "volumeName"),
             ):
@@ -482,7 +488,9 @@ class DatabaseWriter:
             ids["environment"] = env_id
 
             for light_id in environment.light_ids:
-                env_light = EnvironmentLightEntity(environment_id=env_id, light_id=light_id)
+                env_light = EnvironmentLightEntity(
+                    environment_id=env_id, light_id=light_id
+                )
                 if not env_light.get_does_exist(self.db):
                     DatabaseWriter.write_environment_light(
                         self.db,
@@ -518,7 +526,9 @@ class DatabaseWriter:
                         img.file_type: img_id
                         for img_id, img in zip(ids["images"], images or [])
                     }
-                    view_image.image_id = role_index.get(view_image.role, ids["images"][0])
+                    view_image.image_id = role_index.get(
+                        view_image.role, ids["images"][0]
+                    )
                 view_image_id = DatabaseWriter.write_view_image(self.db, view_image)
                 ids["view_images"].append(view_image_id)
 

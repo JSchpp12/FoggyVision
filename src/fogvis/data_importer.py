@@ -77,22 +77,10 @@ def collect_input_images(root_dir: str) -> list:
 def move_image_into_db_dir(
     image_path: Path,
     db_dir: Path,
-    image_format: str = "png",
-    jpeg_quality: int = 95,
 ) -> Path:
-    # Bring the color image into the db. By default the original PNG is copied
-    # as-is. If image_format == "jpg", the image is re-encoded as JPEG.
-    # Masks are handled separately via copy_image_file and are not touched.
     parent_dir: str = image_path.parent.name
     new_image_path: Path = db_dir / "images" / f"{parent_dir}_{image_path.name}"
     new_image_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if image_format == "jpg":
-        jpg_path = new_image_path.with_suffix(".jpg")
-        with Image.open(image_path) as src:
-            src.convert("RGB").save(jpg_path, format="JPEG", quality=jpeg_quality)
-        return jpg_path
-
     shutil.copy2(image_path, new_image_path)
     return new_image_path
 
@@ -170,19 +158,21 @@ def Get_Image_Metadata(img_path):
     with Image.open(img_path) as img:
         return img.size
 
+def copy_data_file(original_data_file_path : Path, image_dir : Path) -> None:
+    parent_dir: str = original_data_file_path.parent.name
+    new_data_file_path: Path = image_dir / "images" / f"{parent_dir}_{original_data_file_path.name}"
+    new_data_file_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(original_data_file_path, new_data_file_path)
+
 
 def process_image_data(
     image: InputImage,
     image_dir: Path,
-    image_format: str = "png",
-    jpeg_quality: int = 95,
 ) -> dict[str, Any]:
-    imported_image_path: Path = move_image_into_db_dir(
-        image.image_path, image_dir, image_format=image_format, jpeg_quality=jpeg_quality
-    )
+    imported_image_path: Path = move_image_into_db_dir(image.image_path, image_dir)
     parsed = parse_image_data_file(image.image_data_file_path)
     masks = copy_ray_masks(image.image_data_file_path, image_dir)
-
+    copy_data_file(image.image_data_file_path, image_dir)
     width, height = Get_Image_Metadata(imported_image_path)
 
     color_image = ImageEntity(
@@ -265,8 +255,6 @@ def process_files(
     importFilePaths: list[InputImage],
     db_dir: Path,
     max_workers: int = 16,
-    image_format: str = "png",
-    jpeg_quality: int = 95,
 ):
     write_queue = queue.Queue(maxsize=500)
     total = len(importFilePaths)
@@ -279,17 +267,9 @@ def process_files(
     writer = threading.Thread(target=writer_thread, args=(db, write_queue), daemon=True)
     writer.start()
 
-    def _process(image: InputImage, image_dir: Path) -> dict[str, Any]:
-        return process_image_data(
-            image,
-            image_dir,
-            image_format=image_format,
-            jpeg_quality=jpeg_quality,
-        )
-
     with tqdm(total=total, desc="Processing files", unit="file") as progress_bar:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            for result in executor.map(_process, importFilePaths, target_output_dir):
+            for result in executor.map(process_image_data, importFilePaths, target_output_dir):
                 write_queue.put(result)
                 progress_bar.update(1)
 
@@ -322,8 +302,6 @@ def cleanup_db(db_dir: Path) -> object:
 def main(
     db_dir: Path,
     import_dir: Path,
-    image_format: str = "png",
-    jpeg_quality: int = 95,
 ):
     if not os.path.exists(import_dir):
         raise Exception("Import image directory does not exist")
@@ -335,11 +313,6 @@ def main(
     if not os.path.exists(image_output_dir):
         os.makedirs(image_output_dir)
 
-    process_files(
-        inputs,
-        db_dir,
-        image_format=image_format,
-        jpeg_quality=jpeg_quality,
-    )
+    process_files(inputs, db_dir)
 
     cleanup_db(db_dir)
