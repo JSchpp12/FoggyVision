@@ -339,5 +339,3 @@ def main(
         image_format=image_format,
         jpeg_quality=jpeg_quality,
     )
-
-    cleanup_db(db_dir)
