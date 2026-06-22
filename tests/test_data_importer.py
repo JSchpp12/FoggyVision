@@ -9,7 +9,7 @@ from fogvis.db.database import Database
 from fogvis.db.database_cleanup import DatabaseCleanup
 
 
-IMPORT_DIR = Path(__file__).resolve().parent.parent / "import"
+IMPORT_DIR = Path(__file__).resolve().parent.parent / "media" / "test"
 IMPORT_DATE_DIRS = sorted(d for d in IMPORT_DIR.iterdir() if d.is_dir())
 
 

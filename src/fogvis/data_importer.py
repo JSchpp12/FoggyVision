@@ -24,9 +24,19 @@ from PIL import Image
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+import re
 
 # used to shutdown the writer thread
 _DONE = object()
+
+# When True, the file-copy helpers skip copying (files are already in place
+# in the db images dir with their final prefixed names) and just return the
+# existing paths. Set by rebuild_db; the import path leaves it False.
+_REBUILD_MODE: bool = False
+
+# Matches the leading date-time stamp prefix on flattened image filenames,
+# e.g. "2026-06-22_09-44-47_Frame-0.json" -> "2026-06-22_09-44-47".
+_PREFIX_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_")
 
 
 @dataclass
@@ -74,10 +84,73 @@ def collect_input_images(root_dir: str) -> list:
     return input_images
 
 
+def _derive_prefix(json_path: Path) -> str:
+    """Extract the date-time prefix from a flattened image filename.
+
+    Files in the db images dir are named "<dateDir>_<originalName>", e.g.
+    "2026-06-22_09-44-47_Frame-0.json". The JSON internals still reference
+    the original unprefixed names ("Frame-0.png"), so the prefix must be
+    prepended when resolving sibling file paths during a rebuild.
+    """
+    m = _PREFIX_RE.match(json_path.name)
+    if not m:
+        raise ValueError(
+            f"Rebuild source JSON lacks a date-time prefix: {json_path}"
+        )
+    return m.group(1) + "_"
+
+
+def collect_input_images_rebuild(root_dir: str) -> list:
+    """Collect InputImages from an already-flattened db images directory.
+
+    Unlike collect_input_images, this expects every file to live directly
+    under root_dir (no date-stamped subdirectories) with the date-time
+    prefix already baked into each filename. The JSON files still reference
+    sibling files by their original unprefixed names, so the prefix is
+    derived from each JSON's own filename and prepended to resolve paths.
+    """
+    root = Path(root_dir)
+    if not root.exists():
+        raise FileNotFoundError(f"Directory not found: {root}")
+
+    input_images = []
+
+    for json_path in sorted(root.glob("*.json")):
+        prefix = _derive_prefix(json_path)
+        reader = ImageImporter(json_path)
+        data = reader._data
+
+        if "image_files" in data:
+            color_rel = data["image_files"].get("file_name", "")
+        else:
+            color_rel = data.get("file_name", "")
+
+        if not color_rel:
+            raise ValueError(f"JSON file missing file_name: {json_path}")
+
+        color_path = (json_path.parent / f"{prefix}{color_rel}").resolve()
+        if not color_path.exists():
+            raise ValueError(f"Missing partner image for: {json_path}")
+
+        input_images.append(
+            InputImage(image_path=color_path, image_data_file_path=json_path)
+        )
+
+    if not input_images:
+        raise ValueError(
+            f"No JSON files found in rebuild images directory: {root}"
+        )
+
+    return input_images
+
+
 def move_image_into_db_dir(
     image_path: Path,
     db_dir: Path,
 ) -> Path:
+    if _REBUILD_MODE:
+        # File is already in the db images dir with its final prefixed name.
+        return image_path
     parent_dir: str = image_path.parent.name
     new_image_path: Path = db_dir / "images" / f"{parent_dir}_{image_path.name}"
     new_image_path.parent.mkdir(parents=True, exist_ok=True)
@@ -87,6 +160,9 @@ def move_image_into_db_dir(
 
 def copy_image_file(source: Path, db_dir: Path) -> Path:
     """Copy an image file into the db images dir and return the destination path."""
+    if _REBUILD_MODE:
+        # Source is already the prefixed, in-place file.
+        return source
     dest_name = f"{source.parent.name}_{source.name}"
     dest = db_dir / "images" / dest_name
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -120,7 +196,13 @@ def copy_ray_masks(json_path: Path, db_dir: Path) -> dict[str, str]:
             result[key] = ""
             continue
 
-        source = (json_path.parent / rel_path).resolve()
+        if _REBUILD_MODE:
+            # JSON references the original unprefixed name; prepend the
+            # date-time prefix derived from the JSON's own filename.
+            prefix = _derive_prefix(json_path)
+            source = (json_path.parent / f"{prefix}{rel_path}").resolve()
+        else:
+            source = (json_path.parent / rel_path).resolve()
         if not source.exists():
             result[key] = ""
             continue
@@ -159,6 +241,9 @@ def Get_Image_Metadata(img_path):
         return img.size
 
 def copy_data_file(original_data_file_path : Path, image_dir : Path) -> None:
+    if _REBUILD_MODE:
+        # The data file is already in place; nothing to copy.
+        return
     parent_dir: str = original_data_file_path.parent.name
     new_data_file_path: Path = image_dir / "images" / f"{parent_dir}_{original_data_file_path.name}"
     new_data_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -314,5 +399,37 @@ def main(
         os.makedirs(image_output_dir)
 
     process_files(inputs, db_dir)
+
+    cleanup_db(db_dir)
+
+
+def rebuild_db(db_dir: Path):
+    """Wipe the database and rebuild it from the existing db images dir.
+
+    Unlike main(), this does not copy any files: the images directory is
+    the source of truth and already contains files with their final
+    prefixed names. Only the database.sqlite3 file is removed; the images
+    directory is left untouched.
+    """
+    global _REBUILD_MODE
+
+    db = Database(db_dir)
+    images_dir: Path = db.import_dir
+    if not os.path.exists(images_dir):
+        raise FileNotFoundError(
+            f"Cannot rebuild: images directory does not exist: {images_dir}"
+        )
+
+    db_path = Path(db.db_path)
+    if os.path.exists(db_path):
+        os.remove(db_path)
+
+    inputs = collect_input_images_rebuild(images_dir)
+
+    try:
+        _REBUILD_MODE = True
+        process_files(inputs, db_dir)
+    finally:
+        _REBUILD_MODE = False
 
     cleanup_db(db_dir)

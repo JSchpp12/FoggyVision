@@ -1,7 +1,7 @@
 import argparse
 from pathlib import Path
 from .data_importer import main as import_main
-from .data_importer import cleanup_db
+from .data_importer import cleanup_db, rebuild_db
 
 
 def main():
@@ -23,11 +23,22 @@ def main():
     )
     cleanup_parser.add_argument("--database", required=True)
 
+    rebuild_parser = subparsers.add_parser(
+        "rebuild",
+        help="Wipe and rebuild the database from the existing images directory",
+    )
+    rebuild_parser.add_argument("--database", required=True)
+
     args = parser.parse_args()
 
     if args.command == "cleanup":
         database_dir: Path = Path(args.database)
         cleanup_db(database_dir)
+        return
+
+    if args.command == "rebuild":
+        database_dir = Path(args.database)
+        rebuild_db(database_dir)
         return
 
     image_dir: Path = Path(args.images)
