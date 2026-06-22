@@ -242,7 +242,10 @@ def writer_thread(d: Database, write_queue: queue.Queue, batch_size: int = 50) -
     writer = DatabaseWriter(d)
     batch = []
 
-    with writer.db as db:
+    # Keep a single connection open for the lifetime of the writer so that
+    # the per-row write_* calls reuse it instead of opening/closing on
+    # every insert.
+    with d:
         while True:
             item = write_queue.get()
             if item is _DONE:
@@ -296,7 +299,7 @@ def process_files(
 
 def _flush(writer: DatabaseWriter, batch: list[dict]) -> None:
     for item in batch:
-        writer.write_full_scene(**item)["scene"]
+        writer.write_full_scene(**item)
 
 
 def init_db(db_file_path: Path):
@@ -326,7 +329,6 @@ def main(
         raise Exception("Import image directory does not exist")
 
     db = Database(db_dir)
-    db.init_tables()
 
     inputs = collect_input_images(import_dir)
     image_output_dir: Path = db.import_dir
@@ -339,3 +341,5 @@ def main(
         image_format=image_format,
         jpeg_quality=jpeg_quality,
     )
+
+    cleanup_db(db_dir)

@@ -20,6 +20,7 @@ class CleanupReport:
     images_removed: int = 0
     files_deleted: int = 0
     environments_removed: int = 0
+    environment_lights_removed: int = 0
     fog_removed: int = 0
     fog_types_removed: int = 0
     lights_removed: int = 0
@@ -33,7 +34,9 @@ class CleanupReport:
         return (
             f"Cleanup: removed {self.duplicate_views_removed} duplicate views, "
             f"{self.images_removed} images, {self.files_deleted} files, "
-            f"{self.environments_removed} environments, {self.fog_removed} fog, "
+            f"{self.environments_removed} environments, "
+            f"{self.environment_lights_removed} environment_lights, "
+            f"{self.fog_removed} fog, "
             f"{self.lights_removed} lights, {self.cameras_removed} cameras, "
             f"{self.scenes_removed} scenes, {self.coordinates_removed} coordinates"
         )
@@ -180,34 +183,43 @@ class DatabaseCleanup:
         candidate_files: Optional[set] = None,
     ) -> None:
         """Delete image rows not referenced by any view.colorImageID or
-        view_image.imageID. If candidate_files is provided, only files in
-        that set are considered for deletion (used during duplicate removal
-        to limit disk activity to files owned by the removed views)."""
+        view_image.imageID, along with their files on disk.
+
+        If candidate_files is provided, only rows whose fileName is in
+        that set are considered — this limits the sweep to images owned
+        by the duplicate views just removed, leaving pre-existing
+        orphans for a standalone sweep."""
         cur = con.cursor()
-        cur.execute(
-            """
-            SELECT id, fileName FROM image
-            WHERE id NOT IN (SELECT colorImageID FROM view)
-              AND id NOT IN (SELECT imageID FROM view_image)
-            """
-        )
+        if candidate_files is not None:
+            if not candidate_files:
+                return
+            placeholders = ",".join(["?"] * len(candidate_files))
+            cur.execute(
+                f"""
+                SELECT id, fileName FROM image
+                WHERE fileName IN ({placeholders})
+                  AND id NOT IN (SELECT colorImageID FROM view)
+                  AND id NOT IN (SELECT imageID FROM view_image)
+                """,
+                tuple(candidate_files),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT id, fileName FROM image
+                WHERE id NOT IN (SELECT colorImageID FROM view)
+                  AND id NOT IN (SELECT imageID FROM view_image)
+                """
+            )
         orphan_rows = cur.fetchall()
 
         for image_id, file_name in orphan_rows:
-            if candidate_files is not None and file_name not in candidate_files:
-                # Row is orphaned but the file was owned by a view we are
-                # not currently removing. Still delete the row (it is
-                # unreferenced) but skip the file unless it was a candidate.
-                self._delete_image_file(file_name, report, allow=False)
-            else:
-                self._delete_image_file(file_name, report, allow=True)
+            self._delete_image_file(file_name, report)
             cur.execute("DELETE FROM image WHERE id = ?", (image_id,))
             report.images_removed += 1
 
-    def _delete_image_file(
-        self, file_name: str, report: CleanupReport, allow: bool
-    ) -> None:
-        if not allow or not file_name:
+    def _delete_image_file(self, file_name: str, report: CleanupReport) -> None:
+        if not file_name:
             return
         path = self.images_dir / file_name
         try:
@@ -238,6 +250,7 @@ class DatabaseCleanup:
             WHERE environmentID NOT IN (SELECT id FROM environment)
             """
         )
+        report.environment_lights_removed += cur.rowcount
 
         # fog not referenced by any environment.
         cur.execute(

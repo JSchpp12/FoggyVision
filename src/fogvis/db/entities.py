@@ -93,7 +93,6 @@ class SceneEntity:
 class CameraEntity:
     scene_id: int
     virtual_position: VectorContainer3D
-    scene_id: int
     look_dir: VectorContainer3D
     fov: float
     near_clip: float

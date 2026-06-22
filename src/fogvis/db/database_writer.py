@@ -394,7 +394,7 @@ class DatabaseWriter:
         fog: Optional[FogEntity] = None,
         fog_type: Optional[FogTypeEntity] = None,
         light: Optional[LightEntity] = None,
-        light_type: Optional[FogTypeEntity] = None,
+        light_type: Optional[LightTypeEntity] = None,
         environment: Optional[EnvironmentEntity] = None,
         images: Optional[list[ImageEntity]] = None,
         views: Optional[list[ViewEntity]] = None,
@@ -426,12 +426,10 @@ class DatabaseWriter:
             ids["scene"] = DatabaseWriter.write_scene(self.db, scene)
 
         # 2. Camera position + camera
-        ids["camera_position"] = center_coord
         if camera.virtual_position.x != 0 or camera.virtual_position.z != 0:
             raise Exception("Assuming that the camera is located at the terrain center")
 
         camera.scene_id = ids["scene"]
-        camera.position_id = ids["camera_position"]
         if camera.get_does_exist(self.db):
             camera_id = camera.get_record_id(self.db)
             if camera_id is None:
