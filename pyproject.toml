@@ -24,5 +24,5 @@ dependencies = [
 [project.scripts]
 fogvis-cli = "fogvis.cli:main"
 
-[tool.hatch.build.targets.wheel]  # ← was [tools.hatch...], missing the 's' fix
+[tool.hatch.build.targets.wheel]
 packages = ["src/fogvis"]
