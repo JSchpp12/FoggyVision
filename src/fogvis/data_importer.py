@@ -221,8 +221,8 @@ def parse_image_data_file(filepath: Path) -> dict[str, Any]:
         "scene_name": scene_data.name,
         "scene_rendering_type": scene_data.rendering_type,
         "scene_center": CoordinateEntity(
-            lat=Latitude(str(scene_data.center.x)),
-            lon=Longitude(str(scene_data.center.y)),
+            lat=Latitude(str(scene_data.center.y)),
+            lon=Longitude(str(scene_data.center.x)),
         ),
         "scene_vis_range": scene_data.vis_range,
         "terrain_shape_center": scene_data.center.to_json(),
