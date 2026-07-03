@@ -400,8 +400,6 @@ def main(
 
     process_files(inputs, db_dir)
 
-    cleanup_db(db_dir)
-
 
 def rebuild_db(db_dir: Path):
     """Wipe the database and rebuild it from the existing db images dir.

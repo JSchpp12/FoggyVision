@@ -40,13 +40,14 @@ def main():
         database_dir = Path(args.database)
         rebuild_db(database_dir)
         return
-
-    image_dir: Path = Path(args.images)
-    database_dir = Path(args.database)
-    import_main(
-        import_dir=image_dir,
-        db_dir=database_dir
-    )
+    
+    if args.command == "import":
+        image_dir: Path = Path(args.images)
+        database_dir = Path(args.database)
+        import_main(
+            import_dir=image_dir,
+            db_dir=database_dir
+        )
 
 
 if __name__ == "__main__":
