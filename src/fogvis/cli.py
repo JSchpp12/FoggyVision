@@ -19,7 +19,7 @@ def main():
 
     cleanup_parser = subparsers.add_parser(
         "cleanup",
-        help="Remove duplicate view records and orphaned files from the database",
+        help="Remove orphaned image files from disk (no database rows are modified)",
     )
     cleanup_parser.add_argument("--database", required=True)
 

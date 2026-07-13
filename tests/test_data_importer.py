@@ -194,12 +194,9 @@ def test_process_files_imports_multiple_frames_and_deduplicates(tmp_path):
         assert distance_types == {"ray_excluding_invalid", "ray_including_invalid"}
 
 
-def test_cleanup_collapses_re_imported_duplicates(tmp_path):
-    """The current fixture imports with no duplicate views. Inject one extra
-    view that duplicates an existing view's (camera, scene, environment)
-    signature but points at a fresh color image; cleanup should collapse the
-    pair back to one view, keeping the earliest (lowest id) and removing the
-    newer duplicate row + its image row + file."""
+def test_cleanup_removes_orphaned_image_files(tmp_path):
+    """cleanup_db should remove image files left on disk that no longer have
+    an image row in the database."""
     import_dir = tmp_path / "import"
     _copy_import_tree(import_dir)
     db_dir = tmp_path / "db"
@@ -207,109 +204,18 @@ def test_cleanup_collapses_re_imported_duplicates(tmp_path):
     inputs = collect_input_images(import_dir)
     process_files(inputs, db_dir, max_workers=1)
 
-    db_path = db_dir / "database.sqlite3"
     images_dir = db_dir / "images"
-
-    with sqlite3.connect(db_path) as conn:
-        before_views = conn.execute("SELECT count(*) FROM view").fetchone()[0]
-        before_images = conn.execute("SELECT count(*) FROM image").fetchone()[0]
-        dup_groups_before = conn.execute(
-            """
-            SELECT COUNT(*) FROM (
-                SELECT 1 FROM view
-                GROUP BY cameraID, sceneID, environmentID
-                HAVING COUNT(*) > 1
-            )
-            """
-        ).fetchone()[0]
-    assert before_views == 6
-    assert before_images == 24
-    assert dup_groups_before == 0
-
-    # Capture the target view to duplicate.
-    with sqlite3.connect(db_path) as conn:
-        row = conn.execute(
-            "SELECT id, cameraID, sceneID, environmentID, colorImageID "
-            "FROM view ORDER BY id LIMIT 1"
-        ).fetchone()
-    target_view_id, camera_id, scene_id, env_id, _ = row
-
-    # Inject a duplicate view: a new color image row + file on disk, plus a
-    # new view row pointing at it with the same camera/scene/environment.
-    db = Database(db_dir)
-    dup_color_name = "2026-06-13_21-40-15_Frame-0_dup.png"
-    dup_image = ImageEntity(
-        file_name=dup_color_name,
-        file_type="color",
-        width=1280,
-        height=720,
-    )
-    dup_image_id = DatabaseWriter.write_image(db, dup_image)
-    (images_dir / dup_color_name).write_bytes(b"fake")
-
-    dup_view = ViewEntity(
-        color_image_id=dup_image_id,
-        camera_id=camera_id,
-        scene_id=scene_id,
-        environment_id=env_id,
-    )
-    dup_view_id = DatabaseWriter.write_view(db, dup_view)
-
-    with sqlite3.connect(db_path) as conn:
-        injected_views = conn.execute("SELECT count(*) FROM view").fetchone()[0]
-        injected_images = conn.execute("SELECT count(*) FROM image").fetchone()[0]
-        injected_dup_groups = conn.execute(
-            """
-            SELECT COUNT(*) FROM (
-                SELECT 1 FROM view
-                GROUP BY cameraID, sceneID, environmentID
-                HAVING COUNT(*) > 1
-            )
-            """
-        ).fetchone()[0]
-    assert injected_views == 7
-    assert injected_images == 25
-    assert injected_dup_groups == 1
+    orphan_name = "2026-06-13_21-40-15_Frame-0_orphan.png"
+    (images_dir / orphan_name).write_bytes(b"fake")
+    assert (images_dir / orphan_name).exists()
 
     report = cleanup_db(db_dir)
 
-    # The injected duplicate view + its color image + file should be removed.
-    assert report.duplicate_views_removed == 1
-    assert report.images_removed == 1
-    assert report.files_deleted == 1
+    assert report.files_deleted >= 1
+    assert not (images_dir / orphan_name).exists()
 
-    with sqlite3.connect(db_path) as conn:
-        after_views = conn.execute("SELECT count(*) FROM view").fetchone()[0]
-        after_images = conn.execute("SELECT count(*) FROM image").fetchone()[0]
-        dup_groups = conn.execute(
-            """
-            SELECT COUNT(*) FROM (
-                SELECT 1 FROM view
-                GROUP BY cameraID, sceneID, environmentID
-                HAVING COUNT(*) > 1
-            )
-            """
-        ).fetchone()[0]
-        # The keeper must still be present.
-        keeper_present = conn.execute(
-            "SELECT COUNT(DISTINCT id) FROM view WHERE id = ?",
-            (target_view_id,),
-        ).fetchone()[0]
-        # The injected duplicate must be gone.
-        dup_present = conn.execute(
-            "SELECT COUNT(DISTINCT id) FROM view WHERE id = ?",
-            (dup_view_id,),
-        ).fetchone()[0]
-
-    assert after_views == 6
-    assert after_images == 24
-    assert dup_groups == 0
-    assert keeper_present == 1
-    assert dup_present == 0
-
-    # The keeper's color image file remains; the duplicate's file is gone.
+    # Files that are still referenced by the database are untouched.
     assert (images_dir / "2026-06-13_21-40-15_Frame-0.png").exists()
-    assert not (images_dir / dup_color_name).exists()
 
 
 def test_data_importer_main_runs_cleanup(tmp_path):

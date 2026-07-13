@@ -90,8 +90,8 @@
     "terrain_name": "berthoud_pass_co",
     "terrain_shape": {
         "center": {
-            "x": 39.794502,
-            "y": -105.76389
+            "x": -105.76389,
+            "y": 39.794502
         },
         "view_distance": 10
     },

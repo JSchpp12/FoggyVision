@@ -29,8 +29,9 @@ def test_read_scene(sample_json_path):
 
     assert scene_data.name == "berthoud_pass_co"
     assert scene_data.rendering_type == "real"
-    assert scene_data.center.x == pytest.approx(39.794502)
-    assert scene_data.center.y == pytest.approx(-105.76389)
+    # Real import format: center.x = longitude, center.y = latitude.
+    assert scene_data.center.x == pytest.approx(-105.76389)
+    assert scene_data.center.y == pytest.approx(39.794502)
     assert scene_data.vis_range == 10
 
 

@@ -339,7 +339,7 @@ def writer_thread(d: Database, write_queue: queue.Queue, batch_size: int = 50) -
 def process_files(
     importFilePaths: list[InputImage],
     db_dir: Path,
-    max_workers: int = 16,
+    max_workers: int = 1,
 ):
     write_queue = queue.Queue(maxsize=500)
     total = len(importFilePaths)
@@ -373,13 +373,18 @@ def init_db(db_file_path: Path):
 
 
 def cleanup_db(db_dir: Path) -> object:
-    """Remove duplicate views and orphaned rows/files left by re-imports.
+    """Remove orphaned image *files* from disk.
+
+    Only files on disk that no longer have a row in the image table are
+    deleted; no database rows are modified. The database is expected to have
+    already been cleaned up by other means (e.g. fog types removed by a
+    maintenance script).
 
     Prints a one-line summary to the console and returns the
     DatabaseCleanup report.
     """
     db = Database(db_dir)
-    report = DatabaseCleanup(db).remove_duplicate_views()
+    report = DatabaseCleanup(db).sweep_orphaned_disk_files()
     print(report)
     return report
 
