@@ -43,3 +43,4 @@ notebooks/db/input/
 notebooks/db/working_db/
 media/db/*
 *import/*
+output/*
