@@ -15,6 +15,7 @@ from fogvis.db.entities import (
     LightTypeEntity,
     EnvironmentEntity,
     EnvironmentLightEntity,
+    SkyboxEntity,
     ImageEntity,
     ViewEntity,
     ViewImageEntity,
@@ -27,6 +28,62 @@ def _init_db(db_dir):
     database = Database(db_dir)
     database.init_tables()
     return database
+
+
+def _view_fixture(db) -> tuple[int, int, int, int]:
+    """Write the rows a view needs and return ``(scene, camera, env, image)``."""
+    coord = CoordinateEntity(lat=Latitude("39.0"), lon=Longitude("-105.0"))
+    scene = SceneEntity(
+        name="test",
+        coverage_distance_miles=10,
+        upper_right_id=DatabaseWriter.write_coordinate(db, coord),
+        lower_left_id=DatabaseWriter.write_coordinate(db, coord),
+        center_id=DatabaseWriter.write_coordinate(db, coord),
+        terrain_rendering_type="real",
+    )
+    scene_id = DatabaseWriter.write_scene(db, scene)
+
+    camera_id = DatabaseWriter.write_camera(
+        db,
+        CameraEntity(
+            scene_id=scene_id,
+            virtual_position=VectorContainer3D.from_json('{"x": 0, "y": 15, "z": 0}'),
+            look_dir=VectorContainer3D.from_json('{"x": 0, "y": 0, "z": -1}'),
+            fov=60.0,
+            near_clip=0.1,
+            far_clip=1000.0,
+        ),
+    )
+
+    fog_type_id = DatabaseWriter.write_fog_type(db, FogTypeEntity(name="marched"))
+    fog_id = DatabaseWriter.write_fog(
+        db,
+        FogEntity(
+            scene_id=scene_id,
+            fog_type_id=fog_type_id,
+            exp_fog_density=0.6,
+            linear_near_distance=0.01,
+            linear_far_distance=16000.0,
+            marched_cutoff=None,
+            marched_color_transparency_cutoff=None,
+            marched_distance_transparency_cutoff=None,
+            marched_light_extinction_scale=None,
+            marched_default_density=0.0,
+            marched_density_multiplier=1.0,
+            marched_lightDirG=0.6,
+            marched_sigmaAbsorption=1e-5,
+            marched_sigmaScattering=1e-4,
+            marched_stepSizeDist=80.0,
+            marched_stepSizeDist_light=100.0,
+        ),
+    )
+    environment_id = DatabaseWriter.write_environment(
+        db, EnvironmentEntity(fog_id=fog_id)
+    )
+    image_id = DatabaseWriter.write_image(
+        db, ImageEntity(file_name="Frame-0.png", file_type="color", width=10, height=10)
+    )
+    return scene_id, camera_id, environment_id, image_id
 
 
 def test_write_scene_includes_terrain(tmp_path):
@@ -469,3 +526,138 @@ def test_write_full_scene_end_to_end(tmp_path):
         assert cur.fetchone()[0] == 1
         cur.execute("SELECT lat, lon FROM coordinate")
         assert cur.fetchone() == pytest.approx((39.794502, -105.76389))
+
+
+def test_write_skybox_deduplicates(tmp_path):
+    db_dir = tmp_path / "test_db"
+    db = _init_db(db_dir)
+    db_path = db_dir / "database.sqlite3"
+
+    first = DatabaseWriter.write_skybox(
+        db, SkyboxEntity(name="autumn_field_puresky_4k")
+    )
+    second = DatabaseWriter.write_skybox(
+        db, SkyboxEntity(name="autumn_field_puresky_4k")
+    )
+
+    assert first == second
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT count(*) FROM skybox").fetchone()[0] == 1
+
+
+def test_view_dedup_preserves_null_skybox_match(tmp_path):
+    db_dir = tmp_path / "test_db"
+    db = _init_db(db_dir)
+    scene_id, camera_id, environment_id, image_id = _view_fixture(db)
+
+    view = ViewEntity(
+        color_image_id=image_id,
+        camera_id=camera_id,
+        scene_id=scene_id,
+        environment_id=environment_id,
+    )
+    first = DatabaseWriter.write_view(db, view)
+    second = DatabaseWriter.write_view(db, view)
+
+    assert first == second
+    with sqlite3.connect(db_dir / "database.sqlite3") as conn:
+        row = conn.execute(
+            "SELECT count(*), count(skyboxID) FROM view"
+        ).fetchone()
+        assert row == (1, 0)
+
+
+def test_view_dedup_includes_skybox(tmp_path):
+    db_dir = tmp_path / "test_db"
+    db = _init_db(db_dir)
+    scene_id, camera_id, environment_id, image_id = _view_fixture(db)
+
+    null_view_id = DatabaseWriter.write_view(
+        db,
+        ViewEntity(
+            color_image_id=image_id,
+            camera_id=camera_id,
+            scene_id=scene_id,
+            environment_id=environment_id,
+        ),
+    )
+    skybox_id = DatabaseWriter.write_skybox(
+        db, SkyboxEntity(name="autumn_field_puresky_4k")
+    )
+    sky_view = ViewEntity(
+        color_image_id=image_id,
+        camera_id=camera_id,
+        scene_id=scene_id,
+        environment_id=environment_id,
+        skybox_id=skybox_id,
+    )
+    sky_view_id = DatabaseWriter.write_view(db, sky_view)
+
+    assert sky_view_id != null_view_id
+    assert DatabaseWriter.write_view(db, sky_view) == sky_view_id
+    with sqlite3.connect(db_dir / "database.sqlite3") as conn:
+        row = conn.execute(
+            "SELECT skyboxID FROM view WHERE id = ?", (sky_view_id,)
+        ).fetchone()
+        assert row == (skybox_id,)
+
+
+def test_write_full_scene_links_skybox(tmp_path):
+    db_dir = tmp_path / "test_db"
+    db = _init_db(db_dir)
+    db_path = db_dir / "database.sqlite3"
+
+    DatabaseWriter(db).write_full_scene(
+        scene_name="berthoud_pass_co",
+        scene_center=CoordinateEntity(
+            lat=Latitude("39.794502"), lon=Longitude("-105.76389")
+        ),
+        scene_vis_range=10,
+        scene_rendering_type="real",
+        camera=CameraEntity(
+            scene_id=0,
+            virtual_position=VectorContainer3D(0.0, 15.0, 0.0),
+            look_dir=VectorContainer3D(0.0, 0.0, -1.0),
+            fov=60.0,
+            near_clip=0.1,
+            far_clip=1000.0,
+        ),
+        fog=FogEntity(
+            scene_id=0,
+            fog_type_id=0,
+            exp_fog_density=0.6,
+            linear_near_distance=0.01,
+            linear_far_distance=16000.0,
+            marched_cutoff=None,
+            marched_color_transparency_cutoff=None,
+            marched_distance_transparency_cutoff=None,
+            marched_light_extinction_scale=None,
+            marched_default_density=0.0,
+            marched_density_multiplier=1.0,
+            marched_lightDirG=0.6,
+            marched_sigmaAbsorption=1e-5,
+            marched_sigmaScattering=1e-4,
+            marched_stepSizeDist=80.0,
+            marched_stepSizeDist_light=100.0,
+        ),
+        fog_type=FogTypeEntity(name="marched"),
+        environment=EnvironmentEntity(fog_id=0),
+        images=[
+            ImageEntity(
+                file_name="Frame-0.png", file_type="color", width=10, height=10
+            )
+        ],
+        views=[
+            ViewEntity(
+                color_image_id=0,
+                camera_id=0,
+                scene_id=0,
+                environment_id=0,
+            )
+        ],
+        skybox=SkyboxEntity(name="autumn_field_puresky_4k"),
+    )
+
+    with sqlite3.connect(db_path) as conn:
+        skybox_id = conn.execute("SELECT id FROM skybox").fetchone()[0]
+        assert conn.execute("SELECT skyboxID FROM view").fetchone()[0] == skybox_id

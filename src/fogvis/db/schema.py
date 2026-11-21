@@ -138,6 +138,15 @@ def create_image_table(cur: sqlite3.Cursor) -> None:
     cur.execute(cmd)
 
 
+def create_skybox_table(cur: sqlite3.Cursor) -> None:
+    cmd = """
+    CREATE TABLE IF NOT EXISTS skybox(
+        id      INTEGER PRIMARY KEY AUTOINCREMENT,
+        name    TEXT NOT NULL UNIQUE
+    )"""
+    cur.execute(cmd)
+
+
 def create_view_table(cur: sqlite3.Cursor) -> None:
     cmd = """
     CREATE TABLE IF NOT EXISTS view(
@@ -145,8 +154,28 @@ def create_view_table(cur: sqlite3.Cursor) -> None:
         colorImageID   INTEGER NOT NULL REFERENCES image(id),
         cameraID       INTEGER NOT NULL REFERENCES camera(id),
         sceneID        INTEGER NOT NULL REFERENCES scene(id),
-        environmentID  INTEGER NOT NULL REFERENCES environment(id)
+        environmentID  INTEGER NOT NULL REFERENCES environment(id),
+        skyboxID       INTEGER REFERENCES skybox(id)
     )"""
+    cur.execute(cmd)
+
+
+def ensure_view_skybox_column(cur: sqlite3.Cursor) -> None:
+    """Add ``view.skyboxID`` to databases created before skybox support.
+
+    ``CREATE TABLE IF NOT EXISTS`` does not alter an existing table, and the
+    nullable ``REFERENCES`` clause is legal because the column's default is
+    NULL.
+    """
+    columns = {row[1] for row in cur.execute("PRAGMA table_info(view)")}
+    if "skyboxID" not in columns:
+        cur.execute(
+            "ALTER TABLE view ADD COLUMN skyboxID INTEGER REFERENCES skybox(id)"
+        )
+
+
+def create_view_skybox_index(cur: sqlite3.Cursor) -> None:
+    cmd = "CREATE INDEX IF NOT EXISTS idx_view_skybox ON view(skyboxID)"
     cur.execute(cmd)
 
 

@@ -170,6 +170,27 @@ class FogTypeEntity:
 
 
 @dataclass
+class SkyboxEntity:
+    name: str
+
+    def get_does_exist(self, db: Database) -> bool:
+        with db as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT EXISTS (SELECT 1 FROM skybox WHERE name = ?)",
+                (self.name,),
+            )
+            return bool(cur.fetchone()[0])
+
+    def get_record_id(self, db: Database) -> Optional[int]:
+        with db as con:
+            cur = con.cursor()
+            cur.execute("SELECT id FROM skybox WHERE name = ?", (self.name,))
+            result = cur.fetchone()
+            return None if result is None else result[0]
+
+
+@dataclass
 class FogEntity:
     scene_id: int
     fog_type_id: int
@@ -513,6 +534,7 @@ class ViewEntity:
     camera_id: int
     scene_id: int
     environment_id: int
+    skybox_id: Optional[int] = None
 
     def _params(self) -> tuple:
         return (
@@ -522,26 +544,38 @@ class ViewEntity:
             self.environment_id,
         )
 
+    def _build_where(self) -> tuple[str, tuple]:
+        conditions = [
+            "colorImageID = ?",
+            "cameraID = ?",
+            "sceneID = ?",
+            "environmentID = ?",
+        ]
+        params: list = list(self._params())
+        # ``skyboxID = NULL`` never matches, so optional links need an explicit
+        # IS NULL branch to keep view deduplication working for legacy rows.
+        if self.skybox_id is None:
+            conditions.append("skyboxID IS NULL")
+        else:
+            conditions.append("skyboxID = ?")
+            params.append(self.skybox_id)
+        return " AND ".join(conditions), tuple(params)
+
     def get_does_exist(self, db: Database) -> bool:
         with db as con:
             cur = con.cursor()
+            where, params = self._build_where()
             cur.execute(
-                """SELECT EXISTS(
-                    SELECT 1 FROM view
-                    WHERE colorImageID = ? AND cameraID = ? AND sceneID = ? AND environmentID = ?
-                )""",
-                self._params(),
+                f"SELECT EXISTS(SELECT 1 FROM view WHERE {where})",
+                params,
             )
             return cur.fetchone()[0]
 
     def get_record_id(self, db: Database) -> int:
         with db as con:
             cur = con.cursor()
-            cur.execute(
-                """SELECT id FROM view
-                WHERE colorImageID = ? AND cameraID = ? AND sceneID = ? AND environmentID = ?""",
-                self._params(),
-            )
+            where, params = self._build_where()
+            cur.execute(f"SELECT id FROM view WHERE {where}", params)
             result = cur.fetchone()
             if result is None:
                 raise Exception("Failed to get record id for view")

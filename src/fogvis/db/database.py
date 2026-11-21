@@ -15,9 +15,12 @@ from .schema import (
     create_environment_light_table,
     create_environment_table,
     create_image_table,
+    create_skybox_table,
     create_view_table,
     create_view_image_table,
+    create_view_skybox_index,
     create_visibility_distance_table,
+    ensure_view_skybox_column,
 )
 
 DB_FILE_NAME: str = "database.sqlite3"
@@ -77,7 +80,10 @@ class Database:
             create_environment_table(cur)
             create_environment_light_table(cur)
             create_image_table(cur)
+            create_skybox_table(cur)
             create_view_table(cur)
+            ensure_view_skybox_column(cur)
+            create_view_skybox_index(cur)
             create_view_image_table(cur)
             create_visibility_distance_table(cur)
 

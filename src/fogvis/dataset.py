@@ -1,4 +1,3 @@
-# dataset.py
 """PyTorch Dataset for loading foggy image data from the SQLite database."""
 
 import sqlite3
@@ -12,24 +11,10 @@ from torch.utils.data import DataLoader, Dataset
 
 
 class FoggyVisionDataset(Dataset):
-    """
-    PyTorch Dataset that loads foggy images and their visibility-distance
-    labels from the project's SQLite database.
+    """PyTorch Dataset of foggy images and visibility-distance labels.
 
-    Each sample is a tuple of ``(image_tensor, log_visibility_label)``.
-
-    Parameters
-    ----------
-    db_path : str | Path
-        Path to ``database.sqlite3``.
-    image_root : str | Path
-        Root directory where per-scene image PNGs are stored on disk.
-    transform : callable, optional
-        A torchvision.transforms-compatible callable applied to every image
-        *after* loading.
-    label_transform : callable, optional
-    A callable applied to the raw visibility distance value so that
-    the caller can normalise / log-transform labels as desired.
+    Each sample is ``(image_tensor, log_visibility_label)`` loaded from the
+    project's SQLite database.
     """
 
     def __init__(
@@ -44,7 +29,9 @@ class FoggyVisionDataset(Dataset):
         self._transform = transform
         self._label_transform = label_transform or (lambda v: v)
 
-        # Build an internal lookup: (id, file_name, visibility_distance)
+        # (id, fileName, visibility_distance) lookups; fileName is the image's
+        # path relative to image_root (including its date-named subdirectory),
+        # linked from view.colorImageID.
         self._samples: list[tuple[int, str, float]] = []
         if self._db_path.exists():
             with Database(self._db_path) as conn:
@@ -53,9 +40,8 @@ class FoggyVisionDataset(Dataset):
                     """
                     SELECT i.id, i.fileName, vd.value
                     FROM image i
-                    JOIN view_image vi ON vi.imageID = i.id
-                    JOIN visibility_distance vd ON vd.viewID = vi.viewID
-                    WHERE vi.role = 'color'
+                    JOIN view v ON v.colorImageID = i.id
+                    JOIN visibility_distance vd ON vd.viewID = v.id
                     ORDER BY i.id
                     """
                 )
@@ -67,7 +53,6 @@ class FoggyVisionDataset(Dataset):
     def __getitem__(self, index: int) -> tuple[torch.Tensor, float]:
         _id, file_name, raw_vis = self._samples[index]
 
-        # --- image ---------------------------------------------------------
         image_path = self._image_root / file_name
         if not image_path.exists():
             raise FileNotFoundError(
@@ -81,7 +66,6 @@ class FoggyVisionDataset(Dataset):
         else:
             raise Exception("Transform must be provided")
 
-        # --- label ---------------------------------------------------------
         label = self._label_transform(raw_vis)
 
         return image, label
@@ -104,11 +88,6 @@ class FoggyVisionDataset(Dataset):
         return [vis for _id, _name, vis in self._samples]
 
 
-# ---------------------------------------------------------------------------
-# Module-level factory for quick setup.
-# ---------------------------------------------------------------------------
-
-
 def get_dataloader(
     db_path: str | Path = "media/db/database.sqlite3",
     image_root: str | Path = "media/db/images",
@@ -122,30 +101,6 @@ def get_dataloader(
     """
     Convenience factory that creates a :class:`FoggyVisionDataset` and wraps it
     in a :class:`torch.utils.data.DataLoader`.
-
-    Parameters
-    ----------
-    db_path : str | Path
-        Path to the SQLite database.
-    image_root : str | Path
-        Root directory where images live on disk.
-    batch_size : int
-        Batch size for the dataloader.
-    shuffle : bool
-        Whether to shuffle the dataset each epoch.
-    transform : callable, optional
-        Image transform applied per-item.
-    label_transform : callable, optional
-        Callable applied to each visibility distance label.
-    num_workers : int
-        Workers for the DataLoader (set >0 for faster I/O).
-    pin_memory : bool
-        Pin memory for faster GPU transfers.
-
-    Returns
-    -------
-    DataLoader
-        A ready-to-iterate PyTorch DataLoader.
     """
     dataset = FoggyVisionDataset(
         db_path=db_path,

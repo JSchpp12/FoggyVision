@@ -14,6 +14,7 @@ from .entities import (
     LightEntity,
     EnvironmentEntity,
     EnvironmentLightEntity,
+    SkyboxEntity,
     ImageEntity,
     ViewEntity,
     ViewImageEntity,
@@ -37,7 +38,6 @@ class DatabaseWriter:
 
     @staticmethod
     def write_coordinate(db: Database, coordinate: CoordinateEntity) -> int:
-        """Insert a coordinate record if it does not already exist, and return its row ID."""
         with db as con:
             cur = con.cursor()
             if coordinate.get_does_exist(db):
@@ -54,7 +54,6 @@ class DatabaseWriter:
 
     @staticmethod
     def write_scene(db: Database, scene: SceneEntity) -> int:
-        """Insert a scene record if it does not already exist, and return its row ID."""
         with db as con:
             cur = con.cursor()
             if scene.get_does_exist(db):
@@ -91,7 +90,6 @@ class DatabaseWriter:
 
     @staticmethod
     def write_camera(db: Database, cam: CameraEntity) -> int:
-        """Insert a camera record if it does not already exist, and return its row ID."""
         with db as con:
             cur = con.cursor()
             if cam.get_does_exist(db):
@@ -120,7 +118,6 @@ class DatabaseWriter:
 
     @staticmethod
     def write_fog_type(db: Database, ft: FogTypeEntity) -> int:
-        """Insert a fog type record if it does not already exist, and return its row ID."""
         with db as con:
             cur = con.cursor()
             if ft.get_does_exist(db):
@@ -139,7 +136,6 @@ class DatabaseWriter:
 
     @staticmethod
     def write_fog(db: Database, fog: FogEntity) -> int:
-        """Insert a fog record if it does not already exist, and return its row ID."""
         with db as con:
             cur = con.cursor()
             if fog.get_does_exist(db):
@@ -213,7 +209,6 @@ class DatabaseWriter:
 
     @staticmethod
     def write_light_type(db: Database, lt: LightTypeEntity) -> int:
-        """Insert a light type record if it does not already exist, and return its row ID."""
         with db as con:
             cur = con.cursor()
             if lt.get_does_exist(db):
@@ -229,7 +224,6 @@ class DatabaseWriter:
 
     @staticmethod
     def write_light(db: Database, light: LightEntity) -> int:
-        """Insert a light record if it does not already exist, and return its row ID."""
         with db as con:
             cur = con.cursor()
             if light.get_does_exist(db):
@@ -269,7 +263,6 @@ class DatabaseWriter:
 
     @staticmethod
     def write_environment(db: Database, environment: EnvironmentEntity) -> int:
-        """Insert an environment record if it does not already exist, and return its row ID."""
         with db as con:
             cur = con.cursor()
             if environment.get_does_exist(db):
@@ -287,7 +280,6 @@ class DatabaseWriter:
     def write_environment_light(
         db: Database, environment_light: EnvironmentLightEntity
     ) -> int:
-        """Insert an environment–light association and return its row ID."""
         with db as con:
             cur = con.cursor()
             cur.execute(
@@ -305,7 +297,6 @@ class DatabaseWriter:
 
     @staticmethod
     def write_image(db: Database, image: ImageEntity) -> int:
-        """Insert an image record if it does not already exist, and return its row ID."""
         with db as con:
             cur = con.cursor()
             if image.get_does_exist(db):
@@ -323,8 +314,25 @@ class DatabaseWriter:
             return cur.lastrowid
 
     @staticmethod
+    def write_skybox(db: Database, skybox: SkyboxEntity) -> int:
+        with db as con:
+            cur = con.cursor()
+            if skybox.get_does_exist(db):
+                skybox_id = skybox.get_record_id(db)
+                if skybox_id is None:
+                    raise Exception("Failed to retrieve existing skybox id")
+                return skybox_id
+
+            cur.execute(
+                "INSERT INTO skybox (name) VALUES (?)",
+                (skybox.name,),
+            )
+            if cur.lastrowid is None:
+                raise Exception("Failed to retrieve newly inserted skybox row ID")
+            return cur.lastrowid
+
+    @staticmethod
     def write_view(db: Database, view: ViewEntity) -> int:
-        """Insert a view record if it does not already exist, and return its row ID."""
         with db as con:
             cur = con.cursor()
             if view.get_does_exist(db):
@@ -332,10 +340,16 @@ class DatabaseWriter:
 
             cur.execute(
                 """
-                INSERT INTO view (colorImageID, cameraID, sceneID, environmentID)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO view (
+                    colorImageID,
+                    cameraID,
+                    sceneID,
+                    environmentID,
+                    skyboxID
+                )
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                view._params(),
+                (*view._params(), view.skybox_id),
             )
             if cur.lastrowid is None:
                 raise Exception("Failed to retrieve newly inserted view row ID")
@@ -343,7 +357,6 @@ class DatabaseWriter:
 
     @staticmethod
     def write_view_image(db: Database, view_image: ViewImageEntity) -> int:
-        """Insert a view_image record if it does not already exist, and return its row ID."""
         with db as con:
             cur = con.cursor()
             if view_image.get_does_exist(db):
@@ -364,7 +377,6 @@ class DatabaseWriter:
     def write_visibility_distance(
         db: Database, visibility_distance: VisibilityDistanceEntity
     ) -> int:
-        """Insert a visibility_distance record if it does not already exist, and return its row ID."""
         with db as con:
             cur = con.cursor()
             if visibility_distance.get_does_exist(db):
@@ -407,10 +419,10 @@ class DatabaseWriter:
         view_images: Optional[list[ViewImageEntity]] = None,
         visibility_distances: Optional[list[VisibilityDistanceEntity]] = None,
         terrain_shape_center: str = "",
+        skybox: Optional[SkyboxEntity] = None,
     ) -> dict[str, int]:
         ids: dict[str, int] = {}
 
-        # 1. Scene
         center_coord: int = DatabaseWriter.write_coordinate(self.db, scene_center)
 
         scene: SceneEntity = SceneEntity(
@@ -431,7 +443,6 @@ class DatabaseWriter:
         else:
             ids["scene"] = DatabaseWriter.write_scene(self.db, scene)
 
-        # 2. Camera position + camera
         if camera.virtual_position.x != 0 or camera.virtual_position.z != 0:
             raise Exception("Assuming that the camera is located at the terrain center")
 
@@ -478,7 +489,6 @@ class DatabaseWriter:
 
         if environment is not None:
             environment.fog_id = ids["fog"]
-            # Ensure the environment's light set includes the light that was just written/reused.
             if "light" in ids:
                 environment.light_ids.add(ids["light"])
             if environment.get_does_exist(self.db):
@@ -497,6 +507,15 @@ class DatabaseWriter:
                         env_light,
                     )
 
+        if skybox is not None:
+            if skybox.get_does_exist(self.db):
+                skybox_id = skybox.get_record_id(self.db)
+                if skybox_id is None:
+                    raise Exception("Failed to retrieve existing skybox id")
+                ids["skybox"] = skybox_id
+            else:
+                ids["skybox"] = DatabaseWriter.write_skybox(self.db, skybox)
+
         if images:
             ids["images"] = []
             for image in images:
@@ -512,6 +531,7 @@ class DatabaseWriter:
                     view.environment_id = ids["environment"]
                 if ids["images"]:
                     view.color_image_id = ids["images"][0]
+                view.skybox_id = ids.get("skybox")
                 view_id = DatabaseWriter.write_view(self.db, view)
                 ids["views"].append(view_id)
 
@@ -521,7 +541,6 @@ class DatabaseWriter:
                 if ids["views"]:
                     view_image.view_id = ids["views"][0]
                 if view_image.image_id == 0 and ids["images"]:
-                    # Map by role to the corresponding image id if available.
                     role_index = {
                         img.file_type: img_id
                         for img_id, img in zip(ids["images"], images or [])

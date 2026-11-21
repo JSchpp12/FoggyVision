@@ -12,8 +12,6 @@ def select_subregions(grey_image, N, candidate_cutoff_values : list[int]):
 
     for T in candidate_cutoff_values:
         _, mask = cv2.threshold(grey_image, T, 255, cv2.THRESH_BINARY_INV)
-
-        #use a simple foreground vs background heuristic to check if the candidate is good
         foreground_ratio = mask.mean() / 255.0
 
         if 0.05 < foreground_ratio < 0.8: 

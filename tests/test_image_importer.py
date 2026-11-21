@@ -19,7 +19,6 @@ def test_distance_metrics_vary_across_frames(sample_json_paths):
     readers = [ImageImporter(p) for p in sample_json_paths]
     ray_counts = [r.read_distance_metrics().excluding_invalid_rays_ray_count for r in readers]
 
-    # All frames should not share the exact same excluding ray count.
     assert len(set(ray_counts)) > 1
 
 
@@ -72,9 +71,11 @@ def test_camera_positions_differ(sample_json_paths):
 
 def test_read_image_entity(sample_json_path):
     reader = ImageImporter(sample_json_path)
-    image = reader.read_image(file_name="images/Frame-0.png", file_type="color")
+    image = reader.read_image(
+        file_name="2026-06-13_21-40-15/Frame-0.png", file_type="color"
+    )
 
-    assert image.file_name == "Frame-0.png"
+    assert image.file_name == "2026-06-13_21-40-15/Frame-0.png"
     assert image.file_type == "color"
 
 
@@ -132,3 +133,50 @@ def test_read_visibility_distances_ray_metrics(tmp_path):
     assert including.median == pytest.approx(250.0)
     assert including.minimum == pytest.approx(75.0)
     assert including.ray_count == 2000
+
+
+def test_read_skybox(tmp_path):
+    data = {
+        "skybox_info": {
+            "name": "autumn_field_puresky_4k",
+            "layout": "equirect",
+            "yaw_degrees": 0.0,
+            "face_size": 1024,
+            "format_scaling": "full",
+        }
+    }
+    json_path = tmp_path / "skybox.json"
+    json_path.write_text(json.dumps(data))
+
+    skybox = ImageImporter(json_path).read_skybox()
+
+    assert skybox is not None
+    assert skybox.name == "autumn_field_puresky_4k"
+
+
+def test_read_skybox_partial_block_only_needs_name(tmp_path):
+    json_path = tmp_path / "skybox_partial.json"
+    json_path.write_text(json.dumps({"skybox_info": {"name": "cloudy_sky"}}))
+
+    skybox = ImageImporter(json_path).read_skybox()
+
+    assert skybox is not None
+    assert skybox.name == "cloudy_sky"
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {},
+        {"skybox_info": None},
+        {"skybox_info": "autumn_field_puresky_4k"},
+        {"skybox_info": {}},
+        {"skybox_info": {"name": ""}},
+        {"skybox_info": {"name": "   "}},
+    ],
+)
+def test_read_skybox_absent_or_blank_is_none(tmp_path, data):
+    json_path = tmp_path / "skybox_missing.json"
+    json_path.write_text(json.dumps(data))
+
+    assert ImageImporter(json_path).read_skybox() is None

@@ -1,3 +1,4 @@
+import json
 import shutil
 import sqlite3
 from pathlib import Path
@@ -30,7 +31,6 @@ def test_collect_input_images_finds_all_frames(tmp_path):
     _copy_import_tree(import_dir)
 
     inputs = collect_input_images(import_dir)
-    # Current fixture: 6 frames across the date dirs.
     assert len(inputs) == 6
     assert all(input.image_path.exists() for input in inputs)
     assert all(input.image_data_file_path.exists() for input in inputs)
@@ -50,13 +50,13 @@ def test_process_files_imports_sample_frame(tmp_path):
     images_dir = db_dir / "images"
     assert images_dir.exists()
     expected_images = [
-        "2026-06-13_21-40-15_Frame-0.png",
-        "2026-06-13_21-40-15_Frame-0_distMask.tif",
-        "2026-06-13_21-40-15_Frame-0_distNormSmlMask.tif",
-        "2026-06-13_21-40-15_Frame-0_validMask.png",
+        ("2026-06-13_21-40-15", "Frame-0.png"),
+        ("2026-06-13_21-40-15", "Frame-0_distMask.tif"),
+        ("2026-06-13_21-40-15", "Frame-0_distNormSmlMask.tif"),
+        ("2026-06-13_21-40-15", "Frame-0_validMask.png"),
     ]
-    for filename in expected_images:
-        assert (images_dir / filename).exists()
+    for date_dir, filename in expected_images:
+        assert (images_dir / date_dir / filename).exists()
 
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
@@ -64,45 +64,37 @@ def test_process_files_imports_sample_frame(tmp_path):
         cur.execute("SELECT count(*) FROM scene")
         assert cur.fetchone()[0] == 1
 
-        # Current fixture: one shared camera look direction.
         cur.execute("SELECT count(*) FROM camera")
         assert cur.fetchone()[0] == 1
 
-        # 6 distinct fog configurations across the fixture.
         cur.execute("SELECT count(*) FROM fog")
         assert cur.fetchone()[0] == 6
 
-        # Two distinct lights across the fixture.
         cur.execute("SELECT count(*) FROM light")
         assert cur.fetchone()[0] == 2
 
-        # One environment per unique fog.
         cur.execute("SELECT count(*) FROM environment")
         assert cur.fetchone()[0] == 6
 
-        # 6 color images + 18 mask images (3 masks per frame).
         cur.execute("SELECT count(*) FROM image")
         assert cur.fetchone()[0] == 24
 
-        # One view per frame.
         cur.execute("SELECT count(*) FROM view")
         assert cur.fetchone()[0] == 6
 
-        # 18 mask links total (three per frame).
         cur.execute("SELECT count(*) FROM view_image")
         assert cur.fetchone()[0] == 18
 
-        # Each frame has both ray metrics (2 per frame).
         cur.execute("SELECT count(*) FROM visibility_distance")
         assert cur.fetchone()[0] == 12
 
         cur.execute(
             "SELECT id, fileName, fileType, width, height FROM image WHERE fileName = ?",
-            ("2026-06-13_21-40-15_Frame-0.png",),
+            ("2026-06-13_21-40-15/Frame-0.png",),
         )
         row = cur.fetchone()
         assert row[0] is not None
-        assert row[1] == "2026-06-13_21-40-15_Frame-0.png"
+        assert row[1] == "2026-06-13_21-40-15/Frame-0.png"
         assert row[2] == "color"
         assert row[3] is not None
         assert row[4] is not None
@@ -124,9 +116,9 @@ def test_process_files_imports_sample_frame(tmp_path):
             (color_image_id,),
         )
         linked_images = {role: name for name, role in cur.fetchall()}
-        assert linked_images.get("ray_distance") == "2026-06-13_21-40-15_Frame-0_distMask.tif"
-        assert linked_images.get("ray_normalized_distance") == "2026-06-13_21-40-15_Frame-0_distNormSmlMask.tif"
-        assert linked_images.get("ray_validity") == "2026-06-13_21-40-15_Frame-0_validMask.png"
+        assert linked_images.get("ray_distance") == "2026-06-13_21-40-15/Frame-0_distMask.tif"
+        assert linked_images.get("ray_normalized_distance") == "2026-06-13_21-40-15/Frame-0_distNormSmlMask.tif"
+        assert linked_images.get("ray_validity") == "2026-06-13_21-40-15/Frame-0_validMask.png"
 
         cur.execute(
             """SELECT distanceType, average, rayCount
@@ -139,6 +131,36 @@ def test_process_files_imports_sample_frame(tmp_path):
         assert distances["ray_excluding_invalid"][1] == 0
         assert distances["ray_including_invalid"][1] == 921600
         assert distances["ray_including_invalid"][0] == pytest.approx(7197.180718457964)
+
+
+def test_process_files_persists_skybox_info(tmp_path):
+    import_dir = tmp_path / "import"
+    _copy_import_tree(import_dir)
+    json_path = sorted(import_dir.rglob("Frame-0.json"))[0]
+    data = json.loads(json_path.read_text())
+    data["skybox_info"] = {
+        "name": "autumn_field_puresky_4k",
+        "layout": "equirect",
+        "yaw_degrees": 0.0,
+        "face_size": 1024,
+        "format_scaling": "full",
+    }
+    json_path.write_text(json.dumps(data))
+
+    db_dir = tmp_path / "db"
+    process_files(collect_input_images(import_dir), db_dir, max_workers=1)
+
+    with sqlite3.connect(db_dir / "database.sqlite3") as conn:
+        assert conn.execute("SELECT count(*) FROM skybox").fetchone()[0] == 1
+        assert conn.execute(
+            "SELECT count(*) FROM view WHERE skyboxID IS NOT NULL"
+        ).fetchone()[0] == 1
+        row = conn.execute(
+            """SELECT skybox.name, view.skyboxID
+               FROM view JOIN skybox ON skybox.id = view.skyboxID"""
+        ).fetchone()
+        assert row[0] == "autumn_field_puresky_4k"
+        assert row[1] is not None
 
 
 def test_process_files_imports_multiple_frames_and_deduplicates(tmp_path):
@@ -155,40 +177,33 @@ def test_process_files_imports_multiple_frames_and_deduplicates(tmp_path):
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
 
-        # Shared scene should be deduplicated to one.
+        # Shared scene should deduplicate to one row.
         cur.execute("SELECT count(*) FROM scene")
         assert cur.fetchone()[0] == 1
 
-        # Current fixture: one shared camera look direction.
         cur.execute("SELECT count(*) FROM camera")
         assert cur.fetchone()[0] == 1
 
-        # 6 distinct fog configurations.
         cur.execute("SELECT count(*) FROM fog")
         assert cur.fetchone()[0] == 6
 
-        # Two distinct lights across the fixture.
         cur.execute("SELECT count(*) FROM light")
         assert cur.fetchone()[0] == 2
 
-        # Each unique fog gets its own environment.
         cur.execute("SELECT count(*) FROM environment")
         assert cur.fetchone()[0] == 6
 
         cur.execute("SELECT count(*) FROM environment_light")
         assert cur.fetchone()[0] == 6
 
-        # One view per frame (no dedup at the writer level since each frame
-        # has its own color image).
+        # One view per frame: each has its own color image, so none dedup.
         cur.execute("SELECT count(*) FROM view")
         assert cur.fetchone()[0] == 6
 
-        # The fixture exercises both "clouds" and "windy_whipped" fog volumes.
         cur.execute("SELECT DISTINCT volumeName FROM fog")
         volume_names = {row[0] for row in cur.fetchall()}
         assert volume_names == {"clouds", "windy_whipped"}
 
-        # Verify visibility distance label types.
         cur.execute("SELECT DISTINCT distanceType FROM visibility_distance")
         distance_types = {row[0] for row in cur.fetchall()}
         assert distance_types == {"ray_excluding_invalid", "ray_including_invalid"}
@@ -205,17 +220,17 @@ def test_cleanup_removes_orphaned_image_files(tmp_path):
     process_files(inputs, db_dir, max_workers=1)
 
     images_dir = db_dir / "images"
-    orphan_name = "2026-06-13_21-40-15_Frame-0_orphan.png"
-    (images_dir / orphan_name).write_bytes(b"fake")
-    assert (images_dir / orphan_name).exists()
+    date_dir = images_dir / "2026-06-13_21-40-15"
+    orphan_path = date_dir / "Frame-0_orphan.png"
+    orphan_path.write_bytes(b"fake")
+    assert orphan_path.exists()
 
     report = cleanup_db(db_dir)
 
     assert report.files_deleted >= 1
-    assert not (images_dir / orphan_name).exists()
+    assert not orphan_path.exists()
 
-    # Files that are still referenced by the database are untouched.
-    assert (images_dir / "2026-06-13_21-40-15_Frame-0.png").exists()
+    assert (date_dir / "Frame-0.png").exists()
 
 
 def test_data_importer_main_runs_cleanup(tmp_path):
@@ -236,7 +251,7 @@ def test_data_importer_main_runs_cleanup(tmp_path):
             """
             SELECT COUNT(*) FROM (
                 SELECT 1 FROM view
-                GROUP BY cameraID, sceneID, environmentID
+                GROUP BY colorImageID, cameraID, sceneID, environmentID, skyboxID
                 HAVING COUNT(*) > 1
             )
             """

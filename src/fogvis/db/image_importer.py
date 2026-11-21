@@ -10,6 +10,7 @@ from .entities import (
     LightEntity,
     FogTypeEntity,
     LightTypeEntity,
+    SkyboxEntity,
     CameraEntity,
     ImageEntity,
     ViewEntity,
@@ -58,6 +59,21 @@ class ImageImporter:
 
     def read_fog_type(self) -> FogTypeEntity:
         return FogTypeEntity(name=self._data["fog_type"])
+
+    def read_skybox(self) -> Optional[SkyboxEntity]:
+        """Read the optional per-frame ``skybox_info`` block.
+
+        Older renderer output has no block at all; only the name is persisted
+        here, so the remaining render settings are ignored.
+        """
+        block = self._data.get("skybox_info")
+        if not isinstance(block, dict):
+            return None
+        name = block.get("name")
+        if name is None:
+            return None
+        name = str(name).strip()
+        return SkyboxEntity(name=name) if name else None
 
     def read_fog(self, *, fog_type_id: int = 0, scene_id: int = 0) -> FogEntity:
         fp = self._data["fog_params"]
@@ -159,7 +175,6 @@ class ImageImporter:
     def read_distance_metrics(self) -> DistanceMetricsEntity:
         distance_metrics = self._data.get("distance_metrics", {})
 
-        # Support both legacy flat format and newer ray_metrics wrapped format
         if "ray_metrics" in distance_metrics:
             excluding = distance_metrics["ray_metrics"]["excludingInvalidRays"]
             including = distance_metrics["ray_metrics"]["includingInvalidRays"]
@@ -216,8 +231,9 @@ class ImageImporter:
     def read_image(
         self, *, file_name: str = "", file_type: str = "color"
     ) -> ImageEntity:
+        # file_name is a path relative to the db images dir, stored as-is.
         return ImageEntity(
-            file_name=Path(file_name).name if file_name else "",
+            file_name=file_name,
             file_type=file_type,
         )
 
@@ -295,7 +311,6 @@ class ImageImporter:
                 )
             )
 
-        # Support both old flat format and newer ray_metrics wrapper.
         if "ray_metrics" in distance_metrics:
             ray_metrics = distance_metrics["ray_metrics"]
         else:
@@ -346,17 +361,11 @@ class ImageImporter:
         light_id: int = 0,
         camera_id: int = 0,
         environment_id: int = 0,
-        # Camera-only extras
         fov: float = 0.0,
         near_clip: float = 0.0,
         far_clip: float = 0.0,
     ) -> FrameData:
-        """
-        Parse the entire JSON file and return a FrameData bundle.
-
-        All *_id keyword arguments let the caller inject real database IDs
-        after the entities have been persisted.
-        """
+        """Parse the entire JSON file and return a FrameData bundle."""
         fog_type = self.read_fog_type()
         fog = self.read_fog(fog_type_id=fog_type_id)
         light_type = self.read_light_type()

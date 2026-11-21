@@ -1,29 +1,19 @@
 #!/usr/bin/env python
 """Remove all records for one or more fog types from the database.
 
-This is a one-off maintenance script, intentionally kept OUT of the fogvis
-package (it lives under scripts/). It deletes every database row that
-belongs to the given fog type(s) - visibility_distance, view_image, view,
-image, environment_light, environment, and fog - while leaving the shared
-infrastructure (scene, camera rows still in use, lights, fog_type rows) and
-all other fog types untouched.
+One-off maintenance script, intentionally kept out of the fogvis package.
+Deletes every row belonging to the given fog type(s) - visibility_distance,
+view_image, view, image, environment_light, environment, fog - while leaving
+shared infrastructure (scene, cameras still referenced, fog_type definition
+rows) and all other fog types untouched. Image files on disk are not deleted;
+that is handled separately by DatabaseCleanup's disk sweep on the machine
+that holds the files.
 
-It does NOT delete image files on disk. That is handled separately by the
-DatabaseCleanup disk sweep (run on the machine that actually holds the
-files), so this script only mutates the database.
-
-Usage
------
-    # preview what would be removed (no changes)
+Usage:
     python scripts/remove_fog_types.py --dry-run
+    python scripts/remove_fog_types.py [--fog-types linear exponential] [--db /path/to/db]
 
-    # remove linear + exponential (the defaults), keeping the fog_type rows
-    python scripts/remove_fog_types.py
-
-    # target different fog types / a different database
-    python scripts/remove_fog_types.py --fog-types linear exponential --db /path/to/db
-
-Back up database.sqlite3 before running this for real.
+Back up database.sqlite3 before running for real.
 """
 
 from __future__ import annotations
@@ -53,12 +43,8 @@ def _resolve_fog_type_ids(con: sqlite3.Connection, names: list[str]) -> list[int
 
 
 def _ensure_indexes(con: sqlite3.Connection) -> None:
-    """Create foreign-key indexes used by the deletes if they don't exist.
-
-    These are cheap, non-destructive, and make the removal fast on large
-    databases (the schema ships with almost no FK indexes). They are left in
-    place afterwards because they help normal queries too.
-    """
+    """Create FK indexes used by the deletes if missing (left in place; they
+    help normal queries too)."""
     con.executescript("""
         CREATE INDEX IF NOT EXISTS idx_fog_typeID        ON fog(typeID);
         CREATE INDEX IF NOT EXISTS idx_env_fogID         ON environment(fogID);
@@ -74,7 +60,7 @@ def _ensure_indexes(con: sqlite3.Connection) -> None:
 
 def _build_scope_tables(con: sqlite3.Connection, ft_ids: list[int]) -> None:
     """Populate temp tables for the fog rows / environments / views / images
-    that are in scope. Must run before any deletes."""
+    in scope. Must run before any deletes."""
     ph = ",".join("?" * len(ft_ids))
 
     con.execute("DROP TABLE IF EXISTS _scope_fogs")
@@ -200,8 +186,6 @@ def remove_fog_types(
             con.execute(f"DELETE FROM fog_type WHERE id IN ({ph})", ft_ids)
 
         if delete_orphan_cameras:
-            # Cameras no longer referenced by any view (e.g. the 170 cameras
-            # only the removed fog types used). Marched keeps its 180.
             con.execute("""DELETE FROM camera
                    WHERE NOT EXISTS (
                        SELECT 1 FROM view WHERE view.cameraID = camera.id
@@ -216,9 +200,6 @@ def remove_fog_types(
             if delta:
                 print(f"  {k:20s} {before[k]:>8d} -> {after[k]:>8d}  (-{delta})")
 
-        # Distinguish the type *definition* rows (kept by default) from the
-        # actual fog bodies still present. The removed types show 0 bodies but
-        # their fog_type row is intentionally retained for ID reuse.
         type_rows = [r[0] for r in con.execute("SELECT name FROM fog_type ORDER BY id")]
         bodies = con.execute(
             """SELECT ft.name, COUNT(f.id) AS n

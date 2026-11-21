@@ -134,7 +134,6 @@ def test_sweep_removes_disk_only_orphan_files(tmp_path):
     db = _init_db(db_dir)
     scene_id, camera_id, _, env_id = _seed_scene_camera_fog_env(db)
 
-    # A referenced image/file that must be kept.
     _add_view_with_image(db, db_dir, scene_id, camera_id, env_id, "keep.png")
 
     images_dir = db_dir / "images"
@@ -156,12 +155,12 @@ def test_sweep_keeps_json_sidecar_for_referenced_color(tmp_path):
     db = _init_db(db_dir)
     scene_id, camera_id, _, env_id = _seed_scene_camera_fog_env(db)
 
-    # Referenced color image + its sidecar -> both kept.
+    # Referenced color image + sidecar -> both kept.
     _add_view_with_image(db, db_dir, scene_id, camera_id, env_id, "alive.png")
     images_dir = db_dir / "images"
     (images_dir / "alive.json").write_bytes(b"{}")
 
-    # Orphan sidecar whose color image has no row -> removed.
+    # Orphan sidecar with no color image -> removed.
     (images_dir / "ghost.json").write_bytes(b"{}")
 
     report = DatabaseCleanup(db).sweep_orphaned_files()
@@ -169,6 +168,38 @@ def test_sweep_keeps_json_sidecar_for_referenced_color(tmp_path):
     assert (images_dir / "alive.json").exists()
     assert (images_dir / "alive.png").exists()
     assert not (images_dir / "ghost.json").exists()
+
+
+def test_sweep_handles_date_subdirectories(tmp_path):
+    """The images dir is organized into date-named subdirectories; the sweep
+    must compare file rows by their path relative to the images dir and
+    remove subdirectories left empty by the sweep."""
+    db_dir = tmp_path / "db"
+    db = _init_db(db_dir)
+    scene_id, camera_id, _, env_id = _seed_scene_camera_fog_env(db)
+
+    images_dir = db_dir / "images"
+    date_dir = images_dir / "2026-06-13_21-40-15"
+    date_dir.mkdir(parents=True)
+
+    # Referenced color image + sidecar inside the date dir.
+    _add_view_with_image(
+        db, db_dir, scene_id, camera_id, env_id, "2026-06-13_21-40-15/alive.png"
+    )
+    (date_dir / "alive.json").write_bytes(b"{}")
+
+    # A fully orphaned date dir: file removed, emptied directory deleted.
+    orphan_dir = images_dir / "2026-06-13_22-01-00"
+    orphan_dir.mkdir()
+    (orphan_dir / "leftover.png").write_bytes(b"fake")
+
+    report = DatabaseCleanup(db).sweep_orphaned_files()
+    assert report.disk_orphans_removed == 1
+    assert (date_dir / "alive.png").exists()
+    assert (date_dir / "alive.json").exists()
+    assert not (orphan_dir / "leftover.png").exists()
+    assert not orphan_dir.exists()
+    assert date_dir.exists()
 
 
 def test_sweep_ignores_unknown_extensions(tmp_path):
@@ -200,9 +231,9 @@ def test_sweep_dry_run_deletes_nothing(tmp_path):
     (images_dir / "leftover.png").write_bytes(b"fake")
 
     report = DatabaseCleanup(db).sweep_orphaned_files(dry_run=True)
-    assert report.images_removed == 1          # the orphaned row would be removed
-    assert report.disk_orphans_removed == 1    # leftover.png would be removed
-    assert report.files_deleted == 0           # nothing actually deleted
+    assert report.images_removed == 1
+    assert report.disk_orphans_removed == 1
+    assert report.files_deleted == 0
     assert (images_dir / "orphan.png").exists()
     assert (images_dir / "leftover.png").exists()
     with sqlite3.connect(db_dir / "database.sqlite3") as conn:
@@ -268,7 +299,7 @@ def test_sweep_removes_orphaned_mask_rows_and_files(tmp_path):
     assert (images_dir / "c_distMask.tif").exists()
 
     report = DatabaseCleanup(db).sweep_orphaned_files()
-    assert report.images_removed == 2          # color + mask
+    assert report.images_removed == 2
     assert report.files_deleted == 2
     assert not (images_dir / "c.png").exists()
     assert not (images_dir / "c_distMask.tif").exists()
@@ -290,8 +321,8 @@ def test_sweep_drops_dangling_view_image_and_cleans_mask(tmp_path):
         db, db_dir, scene_id, camera_id, env_id, "c.png", "c_distMask.tif"
     )
 
-    # Delete ONLY the view, leaving the view_image link dangling. Foreign
-    # keys must be off for this (no ON DELETE cascade on view_image.viewID).
+    # Delete only the view, leaving the view_image link dangling (FKs off:
+    # view_image.viewID has no ON DELETE cascade).
     con = sqlite3.connect(db_path)
     con.execute("PRAGMA foreign_keys = OFF")
     con.execute("DELETE FROM view WHERE id = ?", (view_id,))
@@ -300,7 +331,7 @@ def test_sweep_drops_dangling_view_image_and_cleans_mask(tmp_path):
 
     report = DatabaseCleanup(db).sweep_orphaned_files()
     assert report.view_image_links_removed == 1
-    assert report.images_removed == 2          # color (no view) + mask (link dropped)
+    assert report.images_removed == 2
     assert report.files_deleted == 2
     assert not (images_dir / "c.png").exists()
     assert not (images_dir / "c_distMask.tif").exists()

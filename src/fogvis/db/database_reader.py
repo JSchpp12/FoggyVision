@@ -8,24 +8,12 @@ from fogvis.db.database import Database
 
 
 class DatabaseReader:
-    """
-    Handles reading entities from the database, mirroring the logic
-    of DatabaseWriter but for retrieval operations.
-    """
+    """Reads entity records from the database."""
 
     def __init__(self, db_path: Path) -> None:
         self.db: Database = Database(db_path)
 
     def read_image_by_file_name(self, file_name: str) -> Optional[ImageEntity]:
-        """
-        Reads a single ImageEntity record based on its unique file_name.
-
-        Args:
-            file_name: The unique file name of the image.
-
-        Returns:
-            An ImageEntity object if found, otherwise None.
-        """
         try:
             with self.db as conn:
                 cur = conn.cursor()
@@ -44,15 +32,6 @@ class DatabaseReader:
             return None
 
     def read_view_by_id(self, view_id: int) -> Optional[ViewEntity]:
-        """
-        Reads a single ViewEntity record based on its id.
-
-        Args:
-            view_id: The unique id of the view.
-
-        Returns:
-            A ViewEntity object if found, otherwise None.
-        """
         try:
             with self.db as conn:
                 cur = conn.cursor()
@@ -74,5 +53,3 @@ class DatabaseReader:
         except sqlite3.Error as e:
             print(f"Database error reading view by id: {e}")
             return None
-
-    # Add other read methods here later, e.g., read_scene, read_camera, etc.

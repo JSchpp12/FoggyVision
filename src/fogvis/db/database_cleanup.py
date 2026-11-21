@@ -26,34 +26,22 @@ class CleanupReport:
 
 
 class DatabaseCleanup:
-    """Delete image files on disk that are no longer referenced by the database.
+    """Delete image rows/files and disk files no longer referenced by the database.
 
-    Two kinds of orphans are handled:
+    The images directory holds date-named subdirectories
+    (``images/<date>/<file>``) and the ``image`` table stores each file's
+    path relative to that directory.
 
-    1. **Orphaned image rows** - rows in the ``image`` table (color images
-       *and* ray mask images: ray_distance / ray_normalized_distance /
-       ray_validity) that are not referenced by any ``view.colorImageID``
-       or ``view_image.imageID``. Dangling ``view_image`` links (whose view
-       no longer exists) are dropped first so mask rows held only by a dead
-       view's link are recognized as orphaned. The row and its on-disk file
-       are removed.
-    2. **Disk-only orphans** - files that exist in the images directory but
-       have no corresponding row in the ``image`` table (for example, files
-       left behind after image rows were deleted elsewhere). These files are
-       removed.
-
-    JSON sidecar files are not tracked in the ``image`` table. A sidecar is
-    only considered orphaned when its paired color image (same stem,
-    ``.png``) is also gone; sidecars whose color image is still referenced
-    are kept.
-
-    Only files with a known image/sidecar extension (``.png``, ``.tif``,
-    ``.tiff``, ``.json``) are ever deleted, so unrelated files in the
-    images directory are left untouched.
+    Orphaned image rows (referenced by no ``view.colorImageID`` or
+    ``view_image.imageID``) and their files are removed; dangling
+    ``view_image`` links are dropped first so mask rows held only by a dead
+    view count as orphaned. Files on disk with no image row are removed,
+    along with date subdirectories the sweep empties. JSON sidecars are not
+    tracked in the ``image`` table: a sidecar is deleted only when its paired
+    color image (same stem, ``.png``) is also gone.
     """
 
-    # Extensions that are safe to delete when orphaned. Anything else in the
-    # images directory is ignored even if it has no image row.
+    # Anything else in the images directory is never deleted, image row or not.
     DELETABLE_EXTENSIONS: frozenset[str] = frozenset({".png", ".tif", ".tiff", ".json"})
 
     def __init__(self, db: Database) -> None:
@@ -66,18 +54,15 @@ class DatabaseCleanup:
     def sweep_orphaned_files(self, dry_run: bool = False) -> CleanupReport:
         """Remove orphaned image rows/files and disk-only orphan files.
 
-        When ``dry_run`` is True nothing is deleted; the returned report
-        counts what *would* be removed.
+        When ``dry_run`` is True nothing is deleted; the report counts what
+        would be removed.
         """
         report = CleanupReport()
 
-        # 1. Orphaned image rows -> delete the row and its file.
         with self.db as con:
             cur = con.cursor()
-            # Drop view_image links whose view no longer exists. Without this
-            # a mask image row held only by a dead view's view_image link
-            # would still look "referenced", escape cleanup, and block the
-            # image delete via the view_image.imageID foreign key.
+            # Drop dangling view_image links first, so mask rows held only by
+            # a dead view count as orphaned (and don't block the image delete).
             if dry_run:
                 report.view_image_links_removed = cur.execute(
                     """SELECT COUNT(*) FROM view_image vi
@@ -103,9 +88,8 @@ class DatabaseCleanup:
                 con.execute("DELETE FROM image WHERE id = ?", (image_id,))
                 report.images_removed += 1
 
-        # 2. Files on disk with no image row -> delete the file. The set of
-        #    referenced filenames is read after the row deletions above have
-        #    committed, so files for the rows just removed are now orphans.
+        # Read referenced names after the row deletions have committed, so
+        # files for rows just removed count as orphaned.
         referenced = self._referenced_filenames()
         self._sweep_disk_orphans(referenced, report, dry_run)
 
@@ -114,10 +98,8 @@ class DatabaseCleanup:
     def sweep_orphaned_disk_files(self, dry_run: bool = False) -> CleanupReport:
         """Delete image files on disk that have no row in the ``image`` table.
 
-        This does NOT modify any database rows - it only removes orphaned
-        files from disk. Use this when the database has already been cleaned
-        up by other means (e.g. records removed by a maintenance script) and
-        the leftover files just need to be swept.
+        No database rows are modified; use this once the database has been
+        cleaned up by other means and only the leftover files need sweeping.
         """
         report = CleanupReport()
         referenced = self._referenced_filenames()
@@ -130,12 +112,8 @@ class DatabaseCleanup:
 
     def _find_orphaned_image_rows(self, con) -> list[tuple[int, str]]:
         """Return (id, fileName) for image rows referenced by no view or
-        view_image.
-
-        Covers both color images (linked via view.colorImageID) and ray mask
-        images (linked via view_image.imageID). Call after dangling
-        view_image rows have been removed so masks held only by a dead view
-        are included."""
+        view_image (color or ray mask). Call after dangling view_image rows
+        have been removed."""
         cur = con.cursor()
         cur.execute(
             """
@@ -161,32 +139,46 @@ class DatabaseCleanup:
         report: CleanupReport,
         dry_run: bool,
     ) -> None:
-        """Delete files in the images directory that are not referenced by
-        the ``image`` table. JSON sidecars are deleted only when their
-        paired color image is also gone."""
+        """Delete files under the images dir (including date-named
+        subdirectories) not referenced by the ``image`` table; sidecars are
+        deleted only when their paired color image is also gone."""
         if not self.images_dir.is_dir():
             return
 
-        for path in sorted(self.images_dir.iterdir()):
+        for path in sorted(self.images_dir.rglob("*")):
             if not path.is_file():
                 continue
             if path.suffix.lower() not in self.DELETABLE_EXTENSIONS:
                 continue
-            if path.name in referenced:
+            rel_name = path.relative_to(self.images_dir).as_posix()
+            if rel_name in referenced:
                 continue
 
-            # JSON sidecars are not tracked in image. Treat one as orphaned
-            # only when its paired color image (.png) is also unreferenced.
             if path.suffix.lower() == ".json":
-                color_name = path.with_suffix(".png").name
+                color_name = path.with_suffix(".png").relative_to(
+                    self.images_dir
+                ).as_posix()
                 if color_name in referenced:
                     continue
 
             if dry_run:
                 report.disk_orphans_removed += 1
             else:
-                self._delete_image_file(path.name, report)
+                self._delete_image_file(rel_name, report)
                 report.disk_orphans_removed += 1
+
+        if not dry_run:
+            self._remove_empty_date_dirs()
+
+    def _remove_empty_date_dirs(self) -> None:
+        """Best-effort removal of subdirectories emptied by the sweep."""
+        for sub in self.images_dir.iterdir():
+            if not sub.is_dir():
+                continue
+            try:
+                sub.rmdir()  # only succeeds when the directory is empty
+            except OSError:
+                pass
 
     def _delete_image_file(self, file_name: str, report: CleanupReport) -> None:
         if not file_name:

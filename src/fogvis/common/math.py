@@ -19,14 +19,12 @@ class VectorContainer2D:
         if not isinstance(data, dict):
             raise ValueError('JSON must represent an object (dictionary)')
 
-        # Ensure the three required coordinates are present
         required_keys = {'x', 'y'}
         missing = required_keys - data.keys()
         if missing:
             raise ValueError(f'Missing required keys: {", ".join(sorted(missing))}')
 
         try:
-            # Explicitly convert to float to guard against bad types
             x = float(data['x'])
             y = float(data['y'])
         except (TypeError, ValueError) as exc:
@@ -54,14 +52,12 @@ class VectorContainer3D:
         if not isinstance(data, dict):
             raise ValueError('JSON must represent an object (dictionary)')
 
-        # Ensure the three required coordinates are present
         required_keys = {'x', 'y', 'z'}
         missing = required_keys - data.keys()
         if missing:
             raise ValueError(f'Missing required keys: {", ".join(sorted(missing))}')
 
         try:
-            # Explicitly convert to float to guard against bad types
             x = float(data['x'])
             y = float(data['y'])
             z = float(data['z'])
