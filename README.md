@@ -39,8 +39,10 @@ media:
 ```
 
 `image.fileName` stores a POSIX path relative to `images/`, including the
-session folder. Session folders are named `YYYY-MM-DD_HH-MM-SS` and are the
-only capture-time source in the database.
+session folder. Session folders are named either `YYYY-MM-DD_HH-MM-SS`
+(legacy) or `YYYY-MM-DD_HH-MM-SS-<millis>_pid<pid>` (current) and are the only
+capture-time source in the database. The loader preserves the milliseconds and
+the PID suffix in `record.session`.
 
 The importer's `--database` is the database **directory** (it creates
 `database.sqlite3` and `images/` inside). The loader and viewer, by contrast,
