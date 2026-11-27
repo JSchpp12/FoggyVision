@@ -23,7 +23,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from fogvis.db.database import Database
+from foggy_vision_loader.db.database import Database
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DB_DIR = REPO_ROOT / "media" / "db"

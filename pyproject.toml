@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "FoggyVision"
-version = "0.2.0"
+version = "0.3.0"
 description = "Suite of machine learning approaches to estimate atmospheric visibility"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,6 +23,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Image Processing",
 ]
 dependencies = [
+  "foggy_vision_loader>=0.4.0",
   "torch",
   "Pillow",
   "matplotlib",
@@ -34,9 +35,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
-
-[project.scripts]
-fogvis-cli = "fogvis.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/JSchpp12/FoggyVision"

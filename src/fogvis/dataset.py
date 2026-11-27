@@ -3,7 +3,7 @@
 import sqlite3
 from pathlib import Path
 from typing import Any, Callable, Optional
-from fogvis.db import Database
+from foggy_vision_loader.db import Database
 
 import torch
 from PIL import Image

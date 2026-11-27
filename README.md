@@ -2,22 +2,29 @@
 
 Synthetic fog imagery and renderer metadata for atmospheric-visibility research.
 
-FoggyVision imports rendered frames and their JSON sidecars into a SQLite
-database and exposes the raw metadata plus PyTorch dataset helpers. Browse and
-query an imported dataset with the separate, dependency-free
-`foggy_vision_loader` package (`F:\repos\Foggy_Vision_Loader`).
+FoggyVision exposes renderer metadata and PyTorch dataset helpers for the
+FoggyVision synthetic fog corpus. Dataset importing, querying, cleanup, and
+rebuilding live in the separate `foggy_vision_loader` package
+(`F:\repos\Foggy_Vision_Loader`), which this project depends on for its shared
+database layer and its `fogvis-cli` command.
 
 Python 3.10+ is required.
 
 ## Install
 
+Install the loader first (it is a sibling checkout, not yet published to an
+index), then FoggyVision:
+
 ```powershell
+cd F:\repos\Foggy_Vision_Loader
+python -m pip install -e .
+
 cd F:\repos\FoggyVision
 python -m pip install -e ".[dev]"
 ```
 
-This installs the runtime stack used by the importer and ML helpers (`torch`,
-`Pillow`, `numpy`, `scipy`, `opencv-python`, `matplotlib`, `tqdm`) plus pytest.
+This installs the ML stack used by the dataset helpers (`torch`, `Pillow`,
+`numpy`, `scipy`, `opencv-python`, `matplotlib`, `tqdm`) plus pytest.
 Importing the top-level `fogvis` package is lightweight; only
 `fogvis.dataset` imports torch.
 
@@ -44,42 +51,27 @@ session folder. Session folders are named either `YYYY-MM-DD_HH-MM-SS`
 capture-time source in the database. The loader preserves the milliseconds and
 the PID suffix in `record.session`.
 
-The importer's `--database` is the database **directory** (it creates
-`database.sqlite3` and `images/` inside). The loader and viewer, by contrast,
-take the `database.sqlite3` **file** itself.
+The loader's importer takes `--database` as the database **directory** (it
+creates `database.sqlite3` and `images/` inside). The query facade and viewer,
+by contrast, take the `database.sqlite3` **file** itself.
 
 ## Importing
 
+Dataset import, cleanup, and rebuild are provided by `foggy_vision_loader`'s
+`fogvis-cli`, which is installed with this project:
+
 ```powershell
-# Small bundled sample (3 sessions, 6 frames)
 fogvis-cli import --database media/db --images media/test
-
-# A rendered session directory (80 frames, ~400 MB copied)
-fogvis-cli import --database media/db --images F:\repos\2026-11-08_14-05-50
-```
-
-Other commands:
-
-```powershell
 fogvis-cli cleanup --database media/db   # delete orphaned files on disk
 fogvis-cli rebuild --database media/db   # wipe and rebuild from images/
 ```
 
-The importer accepts both JSON layouts used by the renderer (`image_files` /
-`distance_mask_images` wrappers and the older flat `file_name` / `ray_masks`
-keys). When a frame JSON contains a `skybox_info` block, its `name` is stored
-per view in the `skybox` table and linked from `view.skyboxID`; older frame
-JSONs without the block import as `NULL`. Importing into an existing database
-adds the new table/column in place, but only `fogvis-cli rebuild` re-reads the
-preserved Frame JSON sidecars and backfills skybox names for old views.
+See the loader README for the accepted JSON layouts, skybox backfill behavior,
+and import/rebuild details.
 
 ## Querying
 
-Install the standalone loader (standard library only):
-
-```powershell
-python -m pip install -e F:\repos\Foggy_Vision_Loader
-```
+The loader is installed with FoggyVision; query an imported dataset with:
 
 ```python
 from foggy_vision_loader import FoggyVisionLibrary

@@ -5,7 +5,7 @@ import numpy as np
 import json
 from matplotlib import pyplot as plt
 from pathlib import Path
-from fogvis.db import ImageEntity, Database
+from foggy_vision_loader.db import ImageEntity, Database
 from scipy.stats import norm 
 from dataclasses import dataclass, asdict
 
